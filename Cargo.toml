@@ -1,0 +1,12 @@
+[package]
+name = "parser-rs"
+version = "0.1.0"
+edition = "2021"
+description = "Foundational, language-agnostic types shared across hand-written parsers: source spans and column-encoding conversion (codepoints/UTF-16/UTF-8)."
+license = "CC0-1.0"
+
+[lib]
+name = "parser_rs"
+path = "src/lib.rs"
+
+[dependencies]
