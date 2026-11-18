@@ -1,71 +1,183 @@
-//! The shared token vocabulary: one [`TokenKind`] for every language,
-//! generic only over the language's keyword set.
+//! The shared token vocabulary: one [`TokenKind`] for every language.
 //!
 //! - Identifiers, literals and EOF look the same in every WC3-related
-//!   language (JASS, Zinc, Lua, AngelScript, ...), so they're plain
-//!   variants here.
-//! - Punctuation/operators are one shared [`Punct`] enum — the *union* of
-//!   what the languages use. Each language picks which of them its lexer
-//!   accepts (see [`crate::lexer::LexSpec::puncts`]); a new language
-//!   usually needs no new variants at all.
-//! - Keywords differ per language, so they're the type parameter `K`,
-//!   declared with the [`keywords!`](crate::keywords) macro.
+//!   language (JASS, vJASS, Zinc, Lua, AngelScript, ...), so they're plain
+//!   variants.
+//! - Punctuation/operators are one shared [`Punct`] enum and keywords one
+//!   shared [`Kw`] enum, each the *union* of what all the languages use.
+//!   A language or dialect doesn't define its own enums. It picks which
+//!   puncts and keywords are *active* in its
+//!   [`LexSpec`](crate::lexer::LexSpec).
+//! - Activation happens in the lexer. A word whose keyword isn't active
+//!   lexes as a plain identifier. So `library` is an identifier in plain
+//!   JASS and a keyword in vJASS, and the same parser serves both: it never
+//!   sees a keyword the dialect doesn't have.
 
 use std::fmt::{self, Debug, Display};
 
+use crate::span::Span;
 use crate::token::TokenKindExt;
 
-/// A language's keyword set. Implement it with [`keywords!`](crate::keywords).
-pub trait Keyword: Copy + PartialEq + Debug + 'static {
-    /// The keyword spelled `word`, if `word` is one (case-sensitive).
-    fn from_word(word: &str) -> Option<Self>;
-    /// The keyword's source spelling.
-    fn as_str(self) -> &'static str;
-}
-
-/// Declares a keyword enum and its [`Keyword`] impl in one go:
-///
-/// ```
-/// parser_rs::keywords! {
-///     pub enum Kw {
-///         Function = "function",
-///         EndFunction = "endfunction",
-///     }
-/// }
-/// use parser_rs::Keyword;
-/// assert_eq!(Kw::from_word("endfunction"), Some(Kw::EndFunction));
-/// assert_eq!(Kw::Function.as_str(), "function");
-/// ```
-#[macro_export]
 macro_rules! keywords {
-    ($(#[$meta:meta])* $vis:vis enum $name:ident { $($variant:ident = $text:literal),* $(,)? }) => {
-        $(#[$meta])*
+    ($($(#[$vmeta:meta])* $variant:ident = $text:literal),* $(,)?) => {
+        /// Every keyword of every supported language and dialect. Which ones
+        /// a lexer recognizes is decided by a [`KwSet`].
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        $vis enum $name {
-            $($variant),*
+        pub enum Kw {
+            $($(#[$vmeta])* $variant),*
         }
 
-        impl $crate::Keyword for $name {
-            fn from_word(word: &str) -> Option<Self> {
+        impl Kw {
+            /// Every variant.
+            pub const ALL: &'static [Kw] = &[$(Kw::$variant),*];
+
+            /// The keyword spelled `word` in *any* language (case-sensitive).
+            /// Whether it's active is a separate question — see [`KwSet`].
+            pub fn from_word(word: &str) -> Option<Kw> {
                 match word {
-                    $($text => Some($name::$variant),)*
+                    $($text => Some(Kw::$variant),)*
                     _ => None,
                 }
             }
 
-            fn as_str(self) -> &'static str {
+            /// The source spelling.
+            pub fn as_str(self) -> &'static str {
                 match self {
-                    $($name::$variant => $text),*
+                    $(Kw::$variant => $text),*
                 }
             }
         }
-
-        impl ::std::fmt::Display for $name {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                f.write_str($crate::Keyword::as_str(*self))
-            }
-        }
     };
+}
+
+keywords! {
+    // ----- JASS -----
+    Function = "function",
+    EndFunction = "endfunction",
+    Takes = "takes",
+    Returns = "returns",
+    Nothing = "nothing",
+    Native = "native",
+    Globals = "globals",
+    EndGlobals = "endglobals",
+    Constant = "constant",
+    Local = "local",
+    Set = "set",
+    Call = "call",
+    If = "if",
+    Then = "then",
+    ElseIf = "elseif",
+    Else = "else",
+    EndIf = "endif",
+    Loop = "loop",
+    EndLoop = "endloop",
+    ExitWhen = "exitwhen",
+    Return = "return",
+    Debug = "debug",
+    Type = "type",
+    Extends = "extends",
+    Array = "array",
+    And = "and",
+    Or = "or",
+    Not = "not",
+    True = "true",
+    False = "false",
+    Null = "null",
+
+    // ----- vJASS (also used by Zinc) -----
+    Library = "library",
+    LibraryOnce = "library_once",
+    EndLibrary = "endlibrary",
+    Scope = "scope",
+    EndScope = "endscope",
+    Requires = "requires",
+    Needs = "needs",
+    Uses = "uses",
+    Initializer = "initializer",
+    Optional = "optional",
+    Private = "private",
+    Public = "public",
+    Static = "static",
+    Struct = "struct",
+    EndStruct = "endstruct",
+    Interface = "interface",
+    EndInterface = "endinterface",
+    Method = "method",
+    EndMethod = "endmethod",
+    Module = "module",
+    EndModule = "endmodule",
+    Implement = "implement",
+    Operator = "operator",
+    Stub = "stub",
+    Delegate = "delegate",
+    Readonly = "readonly",
+    This = "this",
+    ThisType = "thistype",
+    Super = "super",
+    Hook = "hook",
+    Defaults = "defaults",
+    Keyword = "keyword",
+
+    // ----- Zinc / Lua control flow -----
+    While = "while",
+    Do = "do",
+    For = "for",
+    Break = "break",
+
+    // ----- Lua -----
+    Nil = "nil",
+    End = "end",
+    Repeat = "repeat",
+    Until = "until",
+    In = "in",
+    Goto = "goto",
+}
+
+impl Display for Kw {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// A set of active [`Kw`]s: a `const`-buildable bitset.
+///
+/// ```
+/// use parser_rs::{Kw, KwSet};
+/// const BASE: KwSet = KwSet::of(&[Kw::If, Kw::Then]);
+/// const EXTENDED: KwSet = BASE.union(KwSet::of(&[Kw::Library]));
+/// assert!(EXTENDED.contains(Kw::If) && EXTENDED.contains(Kw::Library));
+/// assert!(!BASE.contains(Kw::Library));
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct KwSet(u128);
+
+const _: () = assert!(Kw::ALL.len() <= 128, "KwSet is a u128 bitset");
+
+impl KwSet {
+    pub const EMPTY: KwSet = KwSet(0);
+
+    pub const fn of(kws: &[Kw]) -> KwSet {
+        let mut bits = 0u128;
+        let mut i = 0;
+        while i < kws.len() {
+            bits |= 1 << kws[i] as u32;
+            i += 1;
+        }
+        KwSet(bits)
+    }
+
+    pub const fn union(self, other: KwSet) -> KwSet {
+        KwSet(self.0 | other.0)
+    }
+
+    pub const fn contains(self, kw: Kw) -> bool {
+        self.0 & (1 << kw as u32) != 0
+    }
+
+    /// The active keyword spelled `word`, if any.
+    pub fn lookup(self, word: &str) -> Option<Kw> {
+        Kw::from_word(word).filter(|&k| self.contains(k))
+    }
 }
 
 macro_rules! puncts {
@@ -160,21 +272,43 @@ impl Display for Punct {
     }
 }
 
-/// A token kind, shared by every language; `K` is the language's
-/// [`Keyword`] set.
+/// A block of another language embedded in the host file between
+/// directive lines (vJASS `//! zinc` ... `//! endzinc`), lexed as one
+/// [`TokenKind::Embedded`] token. The host parser hands `source` to the
+/// embedded language's parser and carries on after it. See
+/// [`crate::lexer::EmbedSpec`].
 #[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind<K> {
-    Keyword(K),
+pub struct Embedded {
+    /// Which embedded language: the [`EmbedSpec::lang`](crate::lexer::EmbedSpec::lang) that matched.
+    pub lang: &'static str,
+    /// The lines between the directives, verbatim (each `\n`-terminated).
+    pub source: String,
+    /// The file line `source` starts on. Lex it with
+    /// [`tokenize_at`](crate::lexer::tokenize_at) and every position
+    /// stays file-absolute.
+    pub first_line: usize,
+    /// The opening directive line.
+    pub open: Span,
+    /// The closing directive line; `None` if the block is unterminated.
+    pub close: Option<Span>,
+}
+
+/// A token kind, shared by every language.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenKind {
+    Keyword(Kw),
     Ident(String),
     Int(i64),
     Real(f64),
     /// A string literal's decoded value.
     Str(String),
     Punct(Punct),
+    /// A whole embedded-language block; see [`Embedded`].
+    Embedded(Box<Embedded>),
     Eof,
 }
 
-impl<K: Keyword> TokenKindExt for TokenKind<K> {
+impl TokenKindExt for TokenKind {
     fn is_eof(&self) -> bool {
         matches!(self, TokenKind::Eof)
     }
@@ -182,15 +316,16 @@ impl<K: Keyword> TokenKindExt for TokenKind<K> {
 
 /// Human-readable, for error messages: `'endfunction'`, `')'`,
 /// `identifier 'x'`, `end of file`, ...
-impl<K: Keyword> Display for TokenKind<K> {
+impl Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenKind::Keyword(k) => write!(f, "'{}'", k.as_str()),
+            TokenKind::Keyword(k) => write!(f, "'{k}'"),
             TokenKind::Ident(s) => write!(f, "identifier '{s}'"),
             TokenKind::Int(v) => write!(f, "integer {v}"),
             TokenKind::Real(v) => write!(f, "real {v}"),
             TokenKind::Str(s) => write!(f, "string {s:?}"),
-            TokenKind::Punct(p) => write!(f, "'{}'", p.text()),
+            TokenKind::Punct(p) => write!(f, "'{p}'"),
+            TokenKind::Embedded(e) => write!(f, "embedded {} block", e.lang),
             TokenKind::Eof => f.write_str("end of file"),
         }
     }
