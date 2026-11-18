@@ -1,8 +1,8 @@
 [package]
 name = "parser-rs"
 version = "0.1.0"
-edition = "2021"
-description = "Foundational, language-agnostic types shared across hand-written parsers: source spans and column-encoding conversion (codepoints/UTF-16/UTF-8)."
+edition = "2024"
+description = "Foundational, language-agnostic building blocks shared across hand-written parsers: spans and column encodings, a lexer cursor, literal scanners, token streams, diagnostics, AST trees and the HTML AST viewer."
 license = "CC0-1.0"
 
 [lib]

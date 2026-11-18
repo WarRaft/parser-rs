@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__ — AST</title>
+<style>
+  :root {
+    --bg: #1e1f22;
+    --bg-panel: #202124;
+    --bg-alt: #26272b;
+    --fg: #d4d4d8;
+    --fg-dim: #7a7d85;
+    --border: #34353a;
+    --accent: #ffcc66;
+    --active-line: #3a3d1f;
+    --select-bg: #4d5f2e;
+    --select-ring: #a3c65a;
+
+    --c-root: #8a8f98;
+    --c-container: #6b7280;
+    --c-decl: #4fd1c5;
+    --c-sig: #b794f4;
+    --c-stmt: #63b3ed;
+    --c-expr: #f6ad55;
+    --c-lit: #68d391;
+    --c-node: #a0aec0;
+
+    --tok-kw: #c586c0;
+    --tok-str: #ce9178;
+    --tok-num: #b5cea8;
+    --tok-com: #6a9955;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --bg-panel: #f7f7f8;
+      --bg-alt: #f0f0f2;
+      --fg: #1f2328;
+      --fg-dim: #6e7781;
+      --border: #d8dee4;
+      --accent: #a6650a;
+      --active-line: #fff3c4;
+      --select-bg: #cdeb9e;
+      --select-ring: #6a9a2d;
+
+      --c-root: #57606a;
+      --c-container: #6e7781;
+      --c-decl: #0f8a7d;
+      --c-sig: #7c3fd4;
+      --c-stmt: #1a68c4;
+      --c-expr: #c2650a;
+      --c-lit: #1a7f37;
+      --c-node: #57606a;
+
+      --tok-kw: #9926b3;
+      --tok-str: #a6650a;
+      --tok-num: #1a7f37;
+      --tok-com: #6e7781;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .toolbar .brand { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .toolbar .file { color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .toolbar input {
+    flex: 0 1 220px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font: inherit;
+  }
+  .toolbar button {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .toolbar button:hover { border-color: var(--accent); }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .count { color: var(--fg-dim); white-space: nowrap; }
+  .toolbar .hint { color: var(--fg-dim); white-space: nowrap; font-size: 11px; }
+
+  .legend { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag {
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .tag-root { color: var(--c-root); }
+  .tag-container { color: var(--c-container); }
+  .tag-decl { color: var(--c-decl); }
+  .tag-sig { color: var(--c-sig); }
+  .tag-stmt { color: var(--c-stmt); }
+  .tag-expr { color: var(--c-expr); }
+  .tag-lit { color: var(--c-lit); }
+
+  .panes {
+    display: flex;
+    height: calc(100% - 41px);
+  }
+  .source, .tree {
+    overflow: auto;
+    height: 100%;
+  }
+  .source {
+    flex: 0 0 42%;
+    margin: 0;
+    padding: 8px 0;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+    white-space: pre;
+    line-height: 1.5;
+  }
+  .tree {
+    flex: 1;
+    padding: 10px 12px;
+  }
+
+  .line { display: flex; padding: 0 12px; }
+  .line.active { background: var(--active-line); }
+  .ln {
+    color: var(--fg-dim);
+    width: 3em;
+    flex: none;
+    text-align: right;
+    padding-right: 12px;
+    user-select: none;
+  }
+  .code { white-space: pre; }
+  .tok-kw { color: var(--tok-kw); }
+  .tok-str { color: var(--tok-str); }
+  .tok-num { color: var(--tok-num); }
+  .tok-com { color: var(--tok-com); font-style: italic; }
+  .code .tok:hover { background: var(--bg-alt); border-radius: 2px; cursor: pointer; }
+  .tok.selected {
+    background: var(--select-bg);
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px var(--select-ring);
+  }
+
+  .node { position: relative; }
+  .node-head {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 1px 4px;
+    padding-left: calc(var(--depth, 0) * 16px);
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .node-head:hover { background: var(--bg-alt); }
+  .node.match > .node-head { background: var(--active-line); }
+  .node.picked > .node-head {
+    background: var(--select-bg);
+    box-shadow: 0 0 0 1px var(--select-ring);
+  }
+  .toggle {
+    color: var(--fg-dim);
+    width: 12px;
+    flex: none;
+    text-align: center;
+    user-select: none;
+  }
+  .node[data-has-children="false"] > .node-head > .toggle { visibility: hidden; }
+  .label { white-space: pre; }
+  .kind-root > .node-head > .label { color: var(--c-root); }
+  .kind-container > .node-head > .label { color: var(--c-container); }
+  .kind-decl > .node-head > .label { color: var(--c-decl); }
+  .kind-sig > .node-head > .label { color: var(--c-sig); font-weight: 600; }
+  .kind-stmt > .node-head > .label { color: var(--c-stmt); }
+  .kind-expr > .node-head > .label { color: var(--c-expr); }
+  .kind-lit > .node-head > .label { color: var(--c-lit); }
+  .kind-node > .node-head > .label { color: var(--c-node); }
+  .linetag {
+    color: var(--fg-dim);
+    font-size: 11px;
+  }
+  .node.collapsed > .children { display: none; }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <span class="brand">jass-rs</span>
+    <span class="file">__TITLE__</span>
+    <input id="filter" type="text" placeholder="filter nodes…">
+    <button id="expandAll">Expand all</button>
+    <button id="collapseAll">Collapse all</button>
+    <span class="spacer"></span>
+    <span class="hint">click source ↔ tree to sync</span>
+    <span class="count" id="nodeCount"></span>
+    <span class="legend">
+      <span class="tag tag-sig">sig</span>
+      <span class="tag tag-stmt">stmt</span>
+      <span class="tag tag-expr">expr</span>
+      <span class="tag tag-lit">lit</span>
+      <span class="tag tag-decl">decl</span>
+      <span class="tag tag-container">container</span>
+    </span>
+  </div>
+  <div class="panes">
+    <pre id="source" class="source">__SOURCE_HTML__</pre>
+    <div id="tree" class="tree"></div>
+  </div>
+  <script id="ast-data" type="application/json">__TREE_JSON__</script>
+  <script>
+  (function () {
+    "use strict";
+    var data = JSON.parse(document.getElementById("ast-data").textContent);
+    var treeEl = document.getElementById("tree");
+    var sourceEl = document.getElementById("source");
+
+    function countNodes(n) {
+      var total = 1;
+      for (var i = 0; i < n.children.length; i++) total += countNodes(n.children[i]);
+      return total;
+    }
+    document.getElementById("nodeCount").textContent = countNodes(data) + " nodes";
+
+    // ---- tree <- source: build DOM rows, remember node -> row on the node
+    // itself (plain object identity is stable for the page's lifetime) ----
+
+    function build(node, depth) {
+      var row = document.createElement("div");
+      row.className = "node kind-" + node.kind;
+      row.style.setProperty("--depth", depth);
+      var hasChildren = node.children && node.children.length > 0;
+      row.setAttribute("data-has-children", hasChildren ? "true" : "false");
+      node.__el = row;
+
+      var head = document.createElement("div");
+      head.className = "node-head";
+
+      var toggle = document.createElement("span");
+      toggle.className = "toggle";
+      toggle.textContent = "▾";
+      head.appendChild(toggle);
+
+      var label = document.createElement("span");
+      label.className = "label";
+      label.textContent = node.label;
+      head.appendChild(label);
+
+      if (node.line !== null) {
+        var lineTag = document.createElement("span");
+        lineTag.className = "linetag";
+        lineTag.textContent = node.eline && node.eline !== node.line
+          ? "L" + node.line + "-" + node.eline
+          : "L" + node.line;
+        head.appendChild(lineTag);
+      }
+
+      row.appendChild(head);
+
+      head.addEventListener("click", function (e) {
+        if (e.target === toggle && hasChildren) {
+          row.classList.toggle("collapsed");
+          toggle.textContent = row.classList.contains("collapsed") ? "▸" : "▾";
+          return;
+        }
+        pickTreeNode(node);
+        highlightSpan(node);
+      });
+
+      if (hasChildren) {
+        var kids = document.createElement("div");
+        kids.className = "children";
+        for (var i = 0; i < node.children.length; i++) {
+          kids.appendChild(build(node.children[i], depth + 1));
+        }
+        row.appendChild(kids);
+      }
+
+      return row;
+    }
+
+    treeEl.appendChild(build(data, 0));
+
+    function clearTreePick() {
+      document.querySelectorAll(".node.picked").forEach(function (n) {
+        n.classList.remove("picked");
+      });
+    }
+
+    function pickTreeNode(node) {
+      clearTreePick();
+      if (!node || !node.__el) return;
+      node.__el.classList.add("picked");
+      var p = node.__el.parentElement;
+      while (p) {
+        if (p.classList && p.classList.contains("node")) {
+          p.classList.remove("collapsed");
+          var t = p.querySelector(":scope > .node-head > .toggle");
+          if (t) t.textContent = "▾";
+        }
+        p = p.parentElement;
+      }
+      node.__el.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    // ---- source highlighting: whole line (coarse, for statements) plus
+    // exact token-range selection (precise, for expressions) ----
+
+    function clearSourceHighlight() {
+      document.querySelectorAll(".line.active").forEach(function (el) {
+        el.classList.remove("active");
+      });
+      document.querySelectorAll(".tok.selected").forEach(function (el) {
+        el.classList.remove("selected");
+      });
+    }
+
+    function highlightSpan(node) {
+      clearSourceHighlight();
+      if (node.line === null) return;
+      var eline = node.eline === null ? node.line : node.eline;
+      for (var ln = node.line; ln <= eline; ln++) {
+        var lineEl = document.getElementById("L" + ln);
+        if (lineEl) lineEl.classList.add("active");
+      }
+      if (node.scol !== null && node.line === eline) {
+        var lineEl2 = document.getElementById("L" + node.line);
+        if (lineEl2) {
+          lineEl2.querySelectorAll(".tok").forEach(function (tok) {
+            var s = parseInt(tok.getAttribute("data-scol"), 10);
+            var e = parseInt(tok.getAttribute("data-ecol"), 10);
+            if (s >= node.scol && e <= node.ecol) tok.classList.add("selected");
+          });
+        }
+      }
+      var primary = document.getElementById("L" + node.line);
+      if (primary) primary.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    // ---- tree <- source: map a clicked/selected source token back to the
+    // deepest AST node whose span contains it ----
+
+    function tokenPosition(node) {
+      var el = node.nodeType === 1 ? node : node.parentElement;
+      var tok = el ? el.closest(".tok") : null;
+      if (!tok) return null;
+      var lineEl = tok.closest(".line");
+      if (!lineEl) return null;
+      return {
+        line: parseInt(lineEl.id.slice(1), 10),
+        scol: parseInt(tok.getAttribute("data-scol"), 10),
+        ecol: parseInt(tok.getAttribute("data-ecol"), 10),
+      };
+    }
+
+    function containsQuery(node, line, scol, ecol) {
+      if (node.line === null) return false;
+      var eline = node.eline === null ? node.line : node.eline;
+      if (node.scol === null) return line >= node.line && line <= eline;
+      if (node.line !== line || eline !== line) return false;
+      return node.scol <= scol && ecol <= node.ecol;
+    }
+
+    function findDeepest(node, line, scol, ecol) {
+      // Recurse into children first, even if `node` itself has no span
+      // (e.g. the Program root, or a pseudo-grouping node like "Then") —
+      // otherwise a spanless ancestor would block the search from ever
+      // reaching the real, spanned descendants underneath it.
+      for (var i = 0; i < node.children.length; i++) {
+        var hit = findDeepest(node.children[i], line, scol, ecol);
+        if (hit) return hit;
+      }
+      return containsQuery(node, line, scol, ecol) ? node : null;
+    }
+
+    sourceEl.addEventListener("mouseup", function () {
+      var sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0 || !sel.anchorNode) return;
+      if (!sourceEl.contains(sel.anchorNode)) return;
+
+      var from = tokenPosition(sel.anchorNode);
+      if (!from) return;
+      var to = tokenPosition(sel.focusNode) || from;
+      if (to.line < from.line || (to.line === from.line && to.ecol < from.scol)) {
+        var tmp = from;
+        from = to;
+        to = tmp;
+      }
+      if (from.line !== to.line) return; // multi-line selections: not supported yet
+
+      var hit = findDeepest(data, from.line, from.scol, to.ecol);
+      if (hit) {
+        pickTreeNode(hit);
+        highlightSpan(hit);
+      }
+    });
+
+    // ---- toolbar controls ----
+
+    document.getElementById("expandAll").addEventListener("click", function () {
+      document.querySelectorAll(".node.collapsed").forEach(function (n) {
+        n.classList.remove("collapsed");
+        var t = n.querySelector(":scope > .node-head > .toggle");
+        if (t) t.textContent = "▾";
+      });
+    });
+
+    document.getElementById("collapseAll").addEventListener("click", function () {
+      document.querySelectorAll('.node[data-has-children="true"]').forEach(function (n) {
+        n.classList.add("collapsed");
+        var t = n.querySelector(":scope > .node-head > .toggle");
+        if (t) t.textContent = "▸";
+      });
+    });
+
+    document.getElementById("filter").addEventListener("input", function (e) {
+      var q = e.target.value.trim().toLowerCase();
+      document.querySelectorAll(".node.match").forEach(function (n) {
+        n.classList.remove("match");
+      });
+      if (!q) return;
+      document.querySelectorAll(".node").forEach(function (n) {
+        var label = n.querySelector(":scope > .node-head > .label");
+        if (label && label.textContent.toLowerCase().indexOf(q) !== -1) {
+          n.classList.add("match");
+          var p = n.parentElement;
+          while (p) {
+            if (p.classList && p.classList.contains("node")) {
+              p.classList.remove("collapsed");
+              var t = p.querySelector(":scope > .node-head > .toggle");
+              if (t) t.textContent = "▾";
+            }
+            p = p.parentElement;
+          }
+        }
+      });
+    });
+  })();
+  </script>
+</body>
+</html>

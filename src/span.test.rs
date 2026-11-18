@@ -71,3 +71,13 @@ fn join_spans_left_start_to_right_end() {
     let right = Span::new(2, 16, 2, 17);
     assert_eq!(left.join(right), Span::new(2, 12, 2, 17));
 }
+
+#[test]
+fn contains_respects_columns_and_whole_line_sentinel() {
+    let span = Span::new(2, 5, 2, 9);
+    assert!(span.contains(2, 5, 9));
+    assert!(span.contains(2, 6, 6));
+    assert!(!span.contains(2, 4, 6));
+    assert!(!span.contains(3, 5, 5));
+    assert!(Span::whole_line(4).contains(4, 100, 100));
+}
