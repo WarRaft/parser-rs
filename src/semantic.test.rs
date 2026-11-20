@@ -98,3 +98,18 @@ fn classifies_lexical_tokens() {
     assert_eq!(t(TokenKind::Punct(Punct::LParen)), None);
     assert_eq!(t(TokenKind::Ident("x".into())), None);
 }
+
+#[test]
+fn encode_splits_multiline_tokens() {
+    let src = "x = [[ab\ncd]]";
+    let t = SemanticToken {
+        line: 1,
+        start_col: 5,
+        end_line: 2,
+        end_col: 5,
+        ty: SemanticType::String,
+        mods: Modifiers::NONE,
+    };
+    let s = SemanticType::String.index();
+    assert_eq!(encode(vec![t], src), vec![0, 4, 4, s, 0, 1, 0, 4, s, 0]);
+}

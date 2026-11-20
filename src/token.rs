@@ -21,23 +21,40 @@ pub struct Token<K> {
     pub line: usize,
     /// 1-indexed column of the token's first character.
     pub col: usize,
-    /// 1-indexed column just past the token's last character (exclusive).
-    /// Tokens never span multiple lines, so this is always on `line`.
+    /// The line the token ends on. Usually `line`; only multi-line
+    /// literals (Lua `[[long strings]]`, AngelScript `"""heredocs"""`)
+    /// differ.
+    pub end_line: usize,
+    /// 1-indexed column just past the token's last character (exclusive),
+    /// on `end_line`.
     pub end_col: usize,
 }
 
 impl<K> Token<K> {
+    /// A single-line token.
     pub fn new(kind: K, line: usize, col: usize, end_col: usize) -> Self {
         Token {
             kind,
             line,
             col,
+            end_line: line,
             end_col,
         }
     }
 
+    /// A token covering `span` (possibly several lines).
+    pub fn spanning(kind: K, span: Span) -> Self {
+        Token {
+            kind,
+            line: span.start_line,
+            col: span.start_col,
+            end_line: span.end_line,
+            end_col: span.end_col,
+        }
+    }
+
     pub fn span(&self) -> Span {
-        Span::new(self.line, self.col, self.line, self.end_col)
+        Span::new(self.line, self.col, self.end_line, self.end_col)
     }
 }
 
@@ -65,13 +82,19 @@ impl ParseError {
         }
     }
 
-    /// An error covering `token`.
+    /// An error covering `token`'s first line. It's at least one column
+    /// wide, so an error at end of file still shows up when underlined.
     pub fn at_token<K>(message: impl Into<String>, token: &Token<K>) -> Self {
+        let end_col = if token.end_line == token.line {
+            token.end_col.max(token.col + 1)
+        } else {
+            token.col + 1
+        };
         ParseError {
             message: message.into(),
             line: token.line,
             col: token.col,
-            end_col: token.end_col,
+            end_col,
         }
     }
 }
@@ -95,6 +118,24 @@ impl<K: TokenKindExt> TokenStream<K> {
 
     pub fn peek(&self) -> &Token<K> {
         &self.tokens[self.pos]
+    }
+
+    /// The current position, to [`reset`](Self::reset) to later: for
+    /// speculative parsing ("is this a declaration?") in languages whose
+    /// grammar needs more than fixed lookahead (AngelScript's C-like
+    /// `Type name` vs. expression statements).
+    pub fn mark(&self) -> usize {
+        self.pos
+    }
+
+    /// Rewinds to a position from [`mark`](Self::mark).
+    pub fn reset(&mut self, mark: usize) {
+        self.pos = mark;
+    }
+
+    /// The kind `n` tokens *back* (`1` = the token just consumed).
+    pub fn prev_kind(&self, n: usize) -> Option<&K> {
+        self.pos.checked_sub(n).map(|i| &self.tokens[i].kind)
     }
 
     pub fn peek_kind(&self) -> &K {

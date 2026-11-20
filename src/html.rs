@@ -6,28 +6,61 @@
 //! Everything (CSS, JS, data) is inlined, so the file works offline from
 //! `file://` — no server, no editor library required.
 
+use crate::kind::TokenKind;
+use crate::lexer::{tokenize_lossy_at, LexSpec};
+use crate::semantic::{SemanticToken, SemanticType};
+use crate::span::Span;
 use crate::tree::Node;
 
-/// The (small) language-specific part of the viewer: how to tell keywords
-/// apart from identifiers, and which comment forms exist. Strings
-/// (`"..."`), rawcodes (`'...'`), numbers and `//` line comments are
-/// highlighted for every language.
+/// The language-specific part of the viewer: its lexer spec. Source
+/// highlighting runs the language's real lexer (tolerant mode), so it
+/// always agrees with the parser about what a keyword, string or comment
+/// is. Embedded blocks (`//! zinc` in vJASS) are highlighted with their
+/// own language's spec from `embedded`, by [`EmbedSpec::lang`](crate::lexer::EmbedSpec::lang).
 #[derive(Debug, Clone, Copy)]
 pub struct HtmlLang {
-    pub is_keyword: fn(&str) -> bool,
-    /// Whether `/* ... */` block comments (possibly multi-line) exist.
-    pub block_comments: bool,
+    pub spec: &'static LexSpec,
+    pub embedded: &'static [(&'static str, &'static LexSpec)],
 }
 
 /// Renders the viewer page for `tree` (the AST already mapped onto
 /// [`Node`]s), built from `source`, titled `title`.
 pub fn render_html(tree: &Node, source: &str, title: &str, lang: &HtmlLang) -> String {
-    let tree_json = node_to_json(tree);
-    let source_html = highlight_source(source, lang);
+    page(tree, &highlight_source(source, lang), title)
+}
 
+/// [`render_html`] for a language that doesn't use the shared token lexer
+/// (a line-oriented data format such as BNI): its source is colored from
+/// the semantic tokens its own scanner produces, the same ones the editor
+/// gets, so the viewer and the editor still agree.
+pub fn render_html_tokens(tree: &Node, source: &str, title: &str, tokens: &[SemanticToken]) -> String {
+    let lines: Vec<&str> = source.lines().collect();
+    let mut marks: Vec<Vec<Mark>> = vec![Vec::new(); lines.len()];
+    for t in tokens {
+        let span = Span::new(t.line, t.start_col, t.end_line, t.end_col);
+        add_mark(&mut marks, &lines, span, token_class(t.ty));
+    }
+    page(tree, &render_lines(&lines, &mut marks), title)
+}
+
+/// The viewer's CSS class for a semantic token type.
+fn token_class(ty: SemanticType) -> &'static str {
+    use SemanticType as T;
+    match ty {
+        T::Comment => "tok-com",
+        T::String | T::Regexp => "tok-str",
+        T::Number => "tok-num",
+        T::Keyword | T::Macro | T::Namespace => "tok-kw",
+        T::Operator => "tok-punct",
+        _ => "tok-ident",
+    }
+}
+
+fn page(tree: &Node, source_html: &str, title: &str) -> String {
+    let tree_json = node_to_json(tree);
     TEMPLATE
         .replace("__TITLE__", &html_escape(title))
-        .replace("__SOURCE_HTML__", &source_html)
+        .replace("__SOURCE_HTML__", source_html)
         .replace("__TREE_JSON__", &tree_json)
 }
 
@@ -94,128 +127,108 @@ fn html_escape(s: &str) -> String {
         .replace('>', "&gt;")
 }
 
+/// One highlighted piece of a line: `[scol, ecol)` with a CSS class.
+type Mark = (usize, usize, &'static str);
+
 fn highlight_source(src: &str, lang: &HtmlLang) -> String {
+    let lines: Vec<&str> = src.lines().collect();
+    let mut marks: Vec<Vec<Mark>> = vec![Vec::new(); lines.len()];
+    collect_marks(src, lang.spec, 1, lang, &lines, &mut marks);
+    render_lines(&lines, &mut marks)
+}
+
+fn render_lines(lines: &[&str], marks: &mut [Vec<Mark>]) -> String {
     let mut out = String::new();
-    let mut in_block_comment = false;
-    for (i, line) in src.lines().enumerate() {
+    for (i, line) in lines.iter().enumerate() {
         let n = i + 1;
         out.push_str(&format!("<div class=\"line\" id=\"L{n}\">"));
         out.push_str(&format!("<span class=\"ln\">{n}</span>"));
         out.push_str("<span class=\"code\">");
-        out.push_str(&highlight_line(line, lang, &mut in_block_comment));
+        out.push_str(&render_line(line, &mut marks[i]));
         out.push_str("</span></div>\n");
     }
     out
 }
 
-/// Tokenizes a single source line for display, wrapping every non-space
-/// lexeme (identifiers, keywords, literals, comments, and individual
-/// punctuation/operator characters) in a `<span class="tok ...">` tagged
-/// with `data-scol`/`data-ecol`. Column bookkeeping deliberately mirrors
-/// [`crate::Cursor`]'s (1-indexed, one column per character) so that these
-/// spans line up exactly with the spans the parsers record — that
-/// alignment is what lets the viewer's JS map a clicked source token
-/// straight to the tree node whose span contains it, and back again.
-///
-/// `in_block_comment` carries an open `/* ...` across lines.
-fn highlight_line(line: &str, lang: &HtmlLang, in_block_comment: &mut bool) -> String {
-    let chars: Vec<char> = line.chars().collect();
-    let mut i = 0usize;
-    let mut out = String::new();
-
-    if *in_block_comment {
-        i = block_comment_end(&chars, 0, in_block_comment);
-        if i > 0 {
-            emit_tok(&mut out, "tok-com", 1, i + 1, &chars[..i].iter().collect::<String>());
-        }
+/// Lexes `src` (a whole file, or an embedded block starting on
+/// `first_line`) and records a mark per token and comment, split per line.
+fn collect_marks(
+    src: &str,
+    spec: &LexSpec,
+    first_line: usize,
+    lang: &HtmlLang,
+    lines: &[&str],
+    marks: &mut [Vec<Mark>],
+) {
+    let lexed = tokenize_lossy_at(src, spec, first_line);
+    for span in &lexed.comments {
+        add_mark(marks, lines, *span, "tok-com");
     }
-
-    while i < chars.len() {
-        let c = chars[i];
-        let col = i + 1;
-
-        if c == '/' && chars.get(i + 1) == Some(&'/') {
-            let text: String = chars[i..].iter().collect();
-            emit_tok(&mut out, "tok-com", col, chars.len() + 1, &text);
-            break;
-        }
-
-        if lang.block_comments && c == '/' && chars.get(i + 1) == Some(&'*') {
-            *in_block_comment = true;
-            let end = block_comment_end(&chars, i + 2, in_block_comment);
-            let text: String = chars[i..end].iter().collect();
-            emit_tok(&mut out, "tok-com", col, end + 1, &text);
-            i = end;
-            continue;
-        }
-
-        if c == '"' || c == '\'' {
-            let start = i;
-            i += 1;
-            while i < chars.len() && chars[i] != c {
-                if c == '"' && chars[i] == '\\' && i + 1 < chars.len() {
-                    i += 1;
+    for tok in &lexed.tokens {
+        let class = match &tok.kind {
+            TokenKind::Keyword(_) => "tok-kw",
+            TokenKind::Ident(_) => "tok-ident",
+            TokenKind::Int(_) | TokenKind::Real(_) => "tok-num",
+            TokenKind::Str(_) => "tok-str",
+            TokenKind::Punct(_) => "tok-punct",
+            TokenKind::Embedded(block) => {
+                for directive in std::iter::once(block.open).chain(block.close) {
+                    add_mark(marks, lines, directive, "tok-kw");
                 }
-                i += 1;
+                if let Some((_, spec)) = lang.embedded.iter().find(|(l, _)| *l == block.lang) {
+                    collect_marks(&block.source, spec, block.first_line, lang, lines, marks);
+                }
+                continue;
             }
-            if i < chars.len() {
-                i += 1;
-            }
-            let text: String = chars[start..i].iter().collect();
-            emit_tok(&mut out, "tok-str", col, i + 1, &text);
-            continue;
-        }
-
-        if c.is_ascii_digit() {
-            let start = i;
-            while i < chars.len() && (chars[i].is_ascii_alphanumeric() || chars[i] == '.') {
-                i += 1;
-            }
-            let text: String = chars[start..i].iter().collect();
-            emit_tok(&mut out, "tok-num", col, i + 1, &text);
-            continue;
-        }
-
-        if c == '_' || c.is_alphabetic() {
-            let start = i;
-            while i < chars.len() && (chars[i] == '_' || chars[i].is_alphanumeric()) {
-                i += 1;
-            }
-            let text: String = chars[start..i].iter().collect();
-            let class = if (lang.is_keyword)(&text) {
-                "tok-kw"
-            } else {
-                "tok-ident"
-            };
-            emit_tok(&mut out, class, col, i + 1, &text);
-            continue;
-        }
-
-        if c.is_whitespace() {
-            out.push(c);
-            i += 1;
-            continue;
-        }
-
-        emit_tok(&mut out, "tok-punct", col, col + 1, &c.to_string());
-        i += 1;
+            TokenKind::Eof => continue,
+        };
+        add_mark(marks, lines, tok.span(), class);
     }
-
-    out
 }
 
-/// Scans from `from` for a closing `*/`; returns the index just past it
-/// (clearing `in_block_comment`), or the line's end if it isn't there.
-fn block_comment_end(chars: &[char], from: usize, in_block_comment: &mut bool) -> usize {
-    let mut j = from;
-    while j + 1 < chars.len() {
-        if chars[j] == '*' && chars[j + 1] == '/' {
-            *in_block_comment = false;
-            return j + 2;
+fn add_mark(marks: &mut [Vec<Mark>], lines: &[&str], span: Span, class: &'static str) {
+    for line in span.start_line..=span.end_line {
+        let Some(text) = lines.get(line.wrapping_sub(1)) else {
+            continue;
+        };
+        let start = if line == span.start_line { span.start_col } else { 1 };
+        let end = if line == span.end_line {
+            span.end_col
+        } else {
+            text.chars().count() + 1
+        };
+        if end > start {
+            marks[line - 1].push((start, end, class));
         }
-        j += 1;
     }
-    chars.len()
+}
+
+/// Renders one source line: every mark becomes a `<span class="tok ...">`
+/// tagged with `data-scol`/`data-ecol`, in the same 1-based codepoint
+/// columns the parsers record. That alignment is what lets the viewer's
+/// JS map a clicked source token straight to the tree node whose span
+/// contains it, and back again. Unmarked text (whitespace, characters the
+/// lexer rejected) is emitted as-is.
+fn render_line(line: &str, marks: &mut [Mark]) -> String {
+    marks.sort_by_key(|m| m.0);
+    let chars: Vec<char> = line.chars().collect();
+    let text = |from: usize, to: usize| -> String {
+        chars[(from - 1).min(chars.len())..(to - 1).min(chars.len())]
+            .iter()
+            .collect()
+    };
+    let mut out = String::new();
+    let mut col = 1;
+    for &(start, end, class) in marks.iter() {
+        if start < col {
+            continue; // overlaps the previous mark
+        }
+        out.push_str(&html_escape(&text(col, start)));
+        emit_tok(&mut out, class, start, end, &text(start, end));
+        col = end;
+    }
+    out.push_str(&html_escape(&text(col, chars.len() + 1)));
+    out
 }
 
 fn emit_tok(out: &mut String, class: &str, start_col: usize, end_col: usize, text: &str) {

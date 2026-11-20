@@ -1,18 +1,34 @@
 use super::*;
+use crate::kind::{Kw, KwSet, Punct};
+use crate::lexer::EmbedSpec;
 use crate::span::Span;
 
-const LANG: HtmlLang = HtmlLang {
-    is_keyword: |w| matches!(w, "local" | "set" | "if"),
-    block_comments: true,
+static INNER: LexSpec = LexSpec {
+    keywords: KwSet::of(&[Kw::Library]),
+    block_comment: Some(("/*", "*/")),
+    puncts: &[Punct::LBrace, Punct::RBrace],
+    ..LexSpec::BASE
 };
 
-const NO_BLOCKS: HtmlLang = HtmlLang {
-    is_keyword: LANG.is_keyword,
-    block_comments: false,
+static HOST: LexSpec = LexSpec {
+    keywords: KwSet::of(&[Kw::Local, Kw::Set, Kw::If]),
+    rawcodes: true,
+    puncts: &[Punct::Assign, Punct::LtEq, Punct::Lt],
+    embeds: &[EmbedSpec {
+        lang: "inner",
+        open: "//! inner",
+        close: "//! endinner",
+    }],
+    ..LexSpec::BASE
 };
 
-fn line(src: &str, lang: &HtmlLang) -> String {
-    highlight_line(src, lang, &mut false)
+static LANG: HtmlLang = HtmlLang {
+    spec: &HOST,
+    embedded: &[("inner", &INNER)],
+};
+
+fn source_html(src: &str) -> String {
+    highlight_source(src, &LANG)
 }
 
 #[test]
@@ -43,33 +59,52 @@ fn serializes_spans_and_whole_line_sentinels() {
 }
 
 #[test]
-fn highlights_keywords_strings_numbers_and_comments() {
-    let l = line("local integer x = 1 // hi \"there\"", &LANG);
-    assert!(l.contains(r#"<span class="tok tok-kw" data-scol="1" data-ecol="6">local</span>"#));
-    assert!(l.contains(r#"<span class="tok tok-ident" data-scol="7" data-ecol="14">integer</span>"#));
-    assert!(l.contains(r#"<span class="tok tok-num" data-scol="19" data-ecol="20">1</span>"#));
-    assert!(l.contains(
-        r#"<span class="tok tok-com" data-scol="21" data-ecol="34">// hi "there"</span>"#
+fn highlights_with_the_languages_own_lexer() {
+    let h = source_html("local x = 'hfoo' <= \"s\" // hi \"there\"");
+    assert!(h.contains(r#"<span class="tok tok-kw" data-scol="1" data-ecol="6">local</span> "#));
+    assert!(h.contains(r#"<span class="tok tok-ident" data-scol="7" data-ecol="8">x</span>"#));
+    // a rawcode is a number; `<=` is one operator, not two characters
+    assert!(h.contains(r#"<span class="tok tok-num" data-scol="11" data-ecol="17">'hfoo'</span>"#));
+    assert!(h.contains(r#"<span class="tok tok-punct" data-scol="18" data-ecol="20">&lt;=</span>"#));
+    assert!(h.contains(r#"<span class="tok tok-str" data-scol="21" data-ecol="24">"s"</span>"#));
+    assert!(h.contains(
+        r#"<span class="tok tok-com" data-scol="25" data-ecol="38">// hi "there"</span>"#
     ));
 }
 
 #[test]
-fn block_comments_span_lines_only_when_enabled() {
-    let mut open = false;
-    let first = highlight_line("x /* a", &LANG, &mut open);
-    assert!(open);
-    assert!(first.contains(r#"data-scol="3" data-ecol="7">/* a</span>"#));
-    let second = highlight_line("b */ y", &LANG, &mut open);
-    assert!(!open);
-    assert!(second.contains(r#"<span class="tok tok-com" data-scol="1" data-ecol="5">b */</span>"#));
-    assert!(second.contains(r#"<span class="tok tok-ident" data-scol="6" data-ecol="7">y</span>"#));
+fn highlights_embedded_blocks_with_their_own_lexer() {
+    let h = source_html("set\n//! inner\nlibrary { /* a\nb */ }\n//! endinner\n");
+    assert!(h.contains(r#"<span class="tok tok-kw" data-scol="1" data-ecol="10">//! inner</span>"#));
+    // `library` is only a keyword of the inner language
+    assert!(h.contains(r#"<span class="tok tok-kw" data-scol="1" data-ecol="8">library</span>"#));
+    // a block comment spanning two lines is marked on both
+    assert!(h.contains(r#"<span class="tok tok-com" data-scol="11" data-ecol="15">/* a</span>"#));
+    assert!(h.contains(r#"<span class="tok tok-com" data-scol="1" data-ecol="5">b */</span>"#));
+}
 
-    let plain = line("/* a */", &NO_BLOCKS);
-    assert!(plain.contains(r#"<span class="tok tok-punct" data-scol="1" data-ecol="2">/</span>"#));
+#[test]
+fn unlexable_characters_are_kept_as_plain_text() {
+    let h = source_html("x # y");
+    assert!(h.contains(r#"x</span> # <span"#));
 }
 
 #[test]
 fn columns_count_codepoints_not_bytes() {
-    let l = line("\"ю😀\" x", &LANG);
-    assert!(l.contains(r#"<span class="tok tok-ident" data-scol="6" data-ecol="7">x</span>"#));
+    let h = source_html("\"ю😀\" x");
+    assert!(h.contains(r#"<span class="tok tok-ident" data-scol="6" data-ecol="7">x</span>"#));
+}
+
+#[test]
+fn colors_source_from_semantic_tokens() {
+    use crate::semantic::{Modifiers, SemanticToken, SemanticType};
+    let tokens = [
+        SemanticToken::new(1, 2, 5, SemanticType::Namespace, Modifiers::NONE),
+        SemanticToken::new(2, 1, 4, SemanticType::Property, Modifiers::NONE),
+        SemanticToken::new(2, 5, 7, SemanticType::Number, Modifiers::NONE),
+    ];
+    let html = render_html_tokens(&Node::leaf("Doc"), "[Sec]\nKey=42", "t", &tokens);
+    assert!(html.contains("<span class=\"tok tok-kw\" data-scol=\"2\" data-ecol=\"5\">Sec</span>]"));
+    assert!(html.contains("<span class=\"tok tok-ident\" data-scol=\"1\" data-ecol=\"4\">Key</span>="));
+    assert!(html.contains("<span class=\"tok tok-num\" data-scol=\"5\" data-ecol=\"7\">42</span>"));
 }

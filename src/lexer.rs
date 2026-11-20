@@ -9,11 +9,8 @@
 //!
 //! const SPEC: LexSpec = LexSpec {
 //!     keywords: KwSet::of(&[Kw::Set]),
-//!     line_comment: "//",
-//!     block_comment: None,
-//!     rawcodes: false,
-//!     embeds: &[],
 //!     puncts: &[Punct::Assign, Punct::EqEq],
+//!     ..LexSpec::BASE
 //! };
 //! let kinds: Vec<_> = tokenize("set x == 1", &SPEC)
 //!     .unwrap()
@@ -31,7 +28,7 @@
 
 use crate::cursor::Cursor;
 use crate::kind::{Embedded, KwSet, Punct, TokenKind};
-use crate::literal::{self, Number};
+use crate::literal::{self, Number, NumberSpec};
 use crate::span::Span;
 use crate::token::{ParseError, Token};
 
@@ -54,6 +51,49 @@ pub struct LexSpec {
     /// Other languages that can be embedded in this one between directive
     /// lines; see [`EmbedSpec`]. Empty for most languages.
     pub embeds: &'static [EmbedSpec],
+    /// Which number forms exist beyond `42`, `0x2A`, `4.2`.
+    pub numbers: NumberSpec,
+    /// Whether `'...'` is a string (Lua, AngelScript). Takes effect only
+    /// without `rawcodes`.
+    pub single_quote_strings: bool,
+    /// Lua long brackets: `[[long strings]]`, `[==[...]==]`, and long
+    /// comments `--[[ ... ]]` (the line comment opener plus a long bracket).
+    pub long_brackets: bool,
+    /// AngelScript `"""heredoc"""` strings.
+    pub heredocs: bool,
+}
+
+impl LexSpec {
+    /// Everything off: `//` comments, no keywords, no puncts. Specs
+    /// start from this and switch on what their language has
+    /// (`LexSpec { keywords: ..., puncts: ..., ..LexSpec::BASE }`).
+    pub const BASE: LexSpec = LexSpec {
+        keywords: KwSet::EMPTY,
+        line_comment: "//",
+        block_comment: None,
+        rawcodes: false,
+        puncts: &[],
+        embeds: &[],
+        numbers: NumberSpec {
+            exponent: false,
+            leading_dot: false,
+            radix_prefixes: false,
+            float_suffix: false,
+            trailing_dot: false,
+            leading_zero_octal: false,
+            dollar_hex: false,
+        },
+        single_quote_strings: false,
+        long_brackets: false,
+        heredocs: false,
+    };
+}
+
+/// Whether a Lua long comment (`--[[` / `--[==[`) starts at the cursor.
+fn long_comment_at(cur: &Cursor, spec: &LexSpec) -> bool {
+    spec.long_brackets
+        && cur.starts_with(spec.line_comment)
+        && literal::long_bracket_level(cur, spec.line_comment.chars().count()).is_some()
 }
 
 /// An embedded language: its blocks run from an `open` directive line to a
@@ -213,12 +253,22 @@ fn next_token(
     comments: &mut Vec<Span>,
     errors: &mut Vec<ParseError>,
 ) -> Result<Token<TokenKind>, ParseError> {
-    cur.skip_trivia_collecting(
-        spec.line_comment,
-        spec.block_comment,
-        Some(comments),
-        &|c| embed_at(c, spec).is_some(),
-    )?;
+    loop {
+        cur.skip_trivia_collecting(
+            spec.line_comment,
+            spec.block_comment,
+            Some(comments),
+            &|c| embed_at(c, spec).is_some() || long_comment_at(c, spec),
+        )?;
+        if !long_comment_at(cur, spec) {
+            break;
+        }
+        let (line, col) = (cur.line(), cur.col());
+        cur.eat_str(spec.line_comment);
+        let result = literal::long_bracket(cur, "long comment", line, col);
+        comments.push(Span::new(line, col, cur.line(), cur.col()));
+        result?;
+    }
     let (line, col) = (cur.line(), cur.col());
 
     if let Some(embed) = embed_at(cur, spec) {
@@ -229,8 +279,11 @@ fn next_token(
         return Ok(Token::new(TokenKind::Eof, line, col, col));
     };
 
-    let kind = if c.is_ascii_digit() {
-        match literal::number(cur, line, col)? {
+    let starts_number = c.is_ascii_digit()
+        || (spec.numbers.leading_dot && c == '.' && cur.peek_at(1).is_some_and(|d| d.is_ascii_digit()))
+        || (spec.numbers.dollar_hex && c == '$');
+    let kind = if starts_number {
+        match literal::number(cur, &spec.numbers, line, col)? {
             Number::Int(v) => TokenKind::Int(v),
             Number::Real(v) => TokenKind::Real(v),
         }
@@ -240,10 +293,16 @@ fn next_token(
             Some(k) => TokenKind::Keyword(k),
             None => TokenKind::Ident(word),
         }
+    } else if c == '"' && spec.heredocs && cur.starts_with("\"\"\"") {
+        TokenKind::Str(literal::heredoc(cur, line, col)?)
     } else if c == '"' {
-        TokenKind::Str(literal::string(cur, line, col)?)
+        TokenKind::Str(literal::quoted(cur, '"', line, col)?)
     } else if c == '\'' && spec.rawcodes {
         TokenKind::Int(literal::rawcode(cur, line, col)?)
+    } else if c == '\'' && spec.single_quote_strings {
+        TokenKind::Str(literal::quoted(cur, '\'', line, col)?)
+    } else if c == '[' && spec.long_brackets && literal::long_bracket_level(cur, 0).is_some() {
+        TokenKind::Str(literal::long_bracket(cur, "long string", line, col)?)
     } else {
         let punct = spec
             .puncts
@@ -255,7 +314,7 @@ fn next_token(
         cur.eat_str(punct.text());
         TokenKind::Punct(punct)
     };
-    Ok(Token::new(kind, line, col, cur.col()))
+    Ok(Token::spanning(kind, Span::new(line, col, cur.line(), cur.col())))
 }
 
 #[cfg(test)]

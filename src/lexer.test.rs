@@ -8,7 +8,6 @@ const SPEC: LexSpec = LexSpec {
     line_comment: "//",
     block_comment: Some(("/*", "*/")),
     rawcodes: true,
-    embeds: &[],
     puncts: &[
         Punct::Lt,
         Punct::Shl,
@@ -17,6 +16,7 @@ const SPEC: LexSpec = LexSpec {
         Punct::Minus,
         Punct::Arrow,
     ],
+    ..LexSpec::BASE
 };
 
 fn kinds(src: &str) -> Vec<TokenKind> {
@@ -162,4 +162,65 @@ fn unterminated_embedded_blocks_run_to_eof() {
 fn tokenize_at_keeps_file_line_numbers() {
     let toks = tokenize_at("\nlocal", &SPEC, 10).unwrap();
     assert_eq!((toks[0].line, toks[0].col), (11, 1));
+}
+
+const LUA_LIKE: LexSpec = LexSpec {
+    keywords: KwSet::of(&[Kw::Local, Kw::Nil]),
+    line_comment: "--",
+    puncts: &[Punct::Minus, Punct::DotDot, Punct::LBracket, Punct::RBracket, Punct::Dot],
+    numbers: crate::literal::NumberSpec {
+        exponent: true,
+        leading_dot: true,
+        radix_prefixes: false,
+        float_suffix: false,
+        trailing_dot: false,
+        leading_zero_octal: false,
+        dollar_hex: false,
+    },
+    single_quote_strings: true,
+    long_brackets: true,
+    ..LexSpec::BASE
+};
+
+#[test]
+fn lua_like_lexical_forms() {
+    let src = "--[==[ long\ncomment ]==] local s = 'a' .. [[x\ny]] -- tail\n.5 1e2 t[ [=[z]=] ]";
+    let lexed = tokenize_lossy(src, &LexSpec { puncts: &[Punct::Assign, Punct::DotDot, Punct::LBracket, Punct::RBracket], ..LUA_LIKE });
+    assert!(lexed.errors.is_empty(), "{:?}", lexed.errors);
+    let kinds: Vec<_> = lexed.tokens.iter().map(|t| t.kind.clone()).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            TokenKind::Keyword(Kw::Local),
+            TokenKind::Ident("s".into()),
+            TokenKind::Punct(Punct::Assign),
+            TokenKind::Str("a".into()),
+            TokenKind::Punct(Punct::DotDot),
+            TokenKind::Str("x\ny".into()),
+            TokenKind::Real(0.5),
+            TokenKind::Real(100.0),
+            TokenKind::Ident("t".into()),
+            TokenKind::Punct(Punct::LBracket),
+            TokenKind::Str("z".into()),
+            TokenKind::Punct(Punct::RBracket),
+            TokenKind::Eof,
+        ]
+    );
+    // the long string token spans two lines
+    let long = &lexed.tokens[5];
+    assert_eq!((long.line, long.col, long.end_line, long.end_col), (2, 31, 3, 4));
+    assert_eq!(lexed.comments[0], Span::new(1, 1, 2, 13));
+    assert_eq!(lexed.comments[1], Span::new(3, 5, 3, 12));
+}
+
+#[test]
+fn heredocs_and_unterminated_long_comments() {
+    let spec = LexSpec { heredocs: true, ..LexSpec::BASE };
+    let toks = tokenize("\"\"\"a\n\"b\" \"\"\"", &spec).unwrap();
+    assert_eq!(toks[0].kind, TokenKind::Str("a\n\"b\" ".into()));
+    assert_eq!((toks[0].end_line, toks[0].end_col), (2, 8));
+
+    let lexed = tokenize_lossy("--[[ never", &LUA_LIKE);
+    assert_eq!(lexed.errors[0].message, "unterminated long comment");
+    assert_eq!(lexed.comments, vec![Span::new(1, 1, 1, 11)]);
 }

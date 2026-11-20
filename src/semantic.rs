@@ -165,30 +165,62 @@ pub fn legend() -> (Vec<&'static str>, Vec<&'static str>) {
 }
 
 /// One highlighted range. Columns are 1-based codepoints (like [`Span`]),
-/// `end_col` exclusive, on a single `line`.
+/// `end_col` exclusive, on `end_line`. Most tokens are single-line
+/// (`end_line == line`); a multi-line one (a Lua long string, an
+/// AngelScript heredoc) is split per line by [`encode`], since editor
+/// tokens can't span lines.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SemanticToken {
     pub line: usize,
     pub start_col: usize,
+    pub end_line: usize,
     pub end_col: usize,
     pub ty: SemanticType,
     pub mods: Modifiers,
 }
 
 impl SemanticToken {
+    /// A single-line token.
     pub fn new(line: usize, start_col: usize, end_col: usize, ty: SemanticType, mods: Modifiers) -> Self {
         SemanticToken {
             line,
             start_col,
+            end_line: line,
             end_col,
             ty,
             mods,
         }
     }
 
-    /// A token covering `tok`.
+    /// A token covering `tok` (possibly several lines).
     pub fn at<K>(tok: &Token<K>, ty: SemanticType, mods: Modifiers) -> Self {
-        SemanticToken::new(tok.line, tok.col, tok.end_col, ty, mods)
+        SemanticToken {
+            line: tok.line,
+            start_col: tok.col,
+            end_line: tok.end_line,
+            end_col: tok.end_col,
+            ty,
+            mods,
+        }
+    }
+
+    /// This token cut into single-line pieces, given the text's lines
+    /// (`lines[0]` is line 1).
+    pub fn split_lines(self, lines: &[&str]) -> Vec<SemanticToken> {
+        if self.end_line <= self.line {
+            return vec![self];
+        }
+        (self.line..=self.end_line)
+            .filter_map(|line| {
+                let start = if line == self.line { self.start_col } else { 1 };
+                let end = if line == self.end_line {
+                    self.end_col
+                } else {
+                    lines.get(line - 1).map_or(1, |l| l.chars().count() + 1)
+                };
+                (end > start).then(|| SemanticToken::new(line, start, end, self.ty, self.mods))
+            })
+            .collect()
     }
 }
 
@@ -259,9 +291,11 @@ pub fn comment_tokens_at(comments: &[Span], source: &str, first_line: usize) -> 
 /// `deltaStartChar` is relative to the previous token's start when on the
 /// same line. Tokens are sorted first. A token overlapping the one before
 /// it is dropped, and so is an empty one.
-pub fn encode(mut tokens: Vec<SemanticToken>, source: &str) -> Vec<u32> {
-    tokens.sort_by_key(|t| (t.line, t.start_col));
+pub fn encode(tokens: Vec<SemanticToken>, source: &str) -> Vec<u32> {
     let lines: Vec<&str> = source.lines().collect();
+    let mut tokens: Vec<SemanticToken> =
+        tokens.into_iter().flat_map(|t| t.split_lines(&lines)).collect();
+    tokens.sort_by_key(|t| (t.line, t.start_col));
     let utf16 = |line: usize, col: usize| {
         let text = lines.get(line.wrapping_sub(1)).copied().unwrap_or("");
         ColumnEncoding::Utf16.from_codepoints(text, col) - 1

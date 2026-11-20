@@ -80,3 +80,10 @@ fn advancing_past_the_end_sticks_at_eof() {
     assert!(ts.at_eof());
     assert_eq!(ts.nth_kind(5), &K::Eof);
 }
+
+#[test]
+fn errors_are_at_least_one_column_wide() {
+    let eof = Token::new(K::Eof, 3, 7, 7);
+    let err = ParseError::at_token("x", &eof);
+    assert_eq!((err.col, err.end_col), (7, 8));
+}

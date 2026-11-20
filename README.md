@@ -1,8 +1,10 @@
 # parser-rs
 
 Language-agnostic building blocks shared by this author's hand-written
-parsers: [`jass-rs`](../jass-rs) (JASS, vJASS planned), [`zinc-rs`](../zinc-rs),
-and Lua and AngelScript later. Their consumer is the
+parsers: [`jass-rs`](../jass-rs) (JASS and vJASS), [`zinc-rs`](../zinc-rs),
+[`lua-rs`](../lua-rs) (Lua 5.3), [`as-rs`](../as-rs) (AngelScript) and
+[`bni-rs`](../bni-rs) (BNI, the Warcraft III data-file format). Their
+consumer is the
 [`wc3-rs`](../wc3-rs) VS Code extension.
 
 This README is the **design reference** for all of them: how a parser
@@ -36,6 +38,28 @@ const VJASS: KwSet = JASS.union(KwSet::of(&[Kw::Library, Kw::Struct, /* ... */])
 const JASS_SPEC: LexSpec  = LexSpec { keywords: JASS, puncts: &[/* ... */], /* ... */ };
 const VJASS_SPEC: LexSpec = LexSpec { keywords: VJASS, block_comment: Some(("/*", "*/")), ..JASS_SPEC };
 ```
+
+**A dialect is chosen per file**, so a project can mix them: plain JASS,
+vJASS with embedded Zinc, and later other dialects such as the Chinese
+JASS variant, whose options will build on the same mechanism. A file
+declares its dialect in a header comment, read by
+`directive::header_directive`:
+
+```jass
+// @dialect vjass
+```
+
+- **Default.** No declaration means the **base language** (plain JASS).
+  A file opts *into* extensions, never out of them, and an unknown name
+  also falls back to the base. In the editor, a file that belongs to a
+  project (a `wc3.bni` in its folder or above) falls back to the
+  project's default dialect first; see the
+  [`wc3-rs` README](../wc3-rs/README.md#projects). The library API itself
+  never looks at the file system.
+- **Header only.** Only the header is read: the leading blank and comment
+  lines.
+- **Safe for other tools.** The setting is an ordinary comment, so
+  JassHelper, the game and other tools ignore it.
 
 So an optional dialect (vJASS on top of JASS) is **not a second parser**.
 It's a bigger keyword set, maybe extra puncts and comment forms, plus
@@ -108,6 +132,27 @@ store a second encoding on AST nodes.
   literals, collects comments) → token-level classification → semantic
   tokens. Editor features like highlighting **must not depend on a
   successful parse**, because the code being typed is usually broken.
+- **One lexer for everything that colors source.** The HTML viewer's
+  source panel runs the language's own `LexSpec` through
+  `tokenize_lossy` too, never a separate hand-written highlighter. So the
+  viewer, the editor and the parser always agree on what a keyword,
+  string or comment is. Embedded blocks are colored by their own
+  language's spec (`HtmlLang::embedded`).
+- **Multi-line tokens.** Lua long strings and AngelScript heredocs keep a
+  real `end_line` (`Token::spanning`). Every consumer splits them per line
+  where it needs to: `semantic::encode` and the HTML viewer do.
+- **Line-oriented data formats** (BNI) are the one exception to the
+  shared lexer: when a character's meaning depends on its place in the
+  line and values are free text, the crate has its own line scanner
+  with its own token kinds. That scanner is then *the* lexer: the
+  parser, the semantic highlighter and the viewer all read it, and the
+  viewer gets its colors as semantic tokens via `render_html_tokens`.
+  Such a format also parses line by line and never fails as a whole: a
+  malformed line becomes an error in the document and parsing goes on.
+- **Never stall.** A tolerant parser or classifier must always make
+  progress. When a construct is cut off (an unclosed parameter list, for
+  example), it ends it at the first token that can't belong to it,
+  instead of swallowing the rest of the file.
 
 ### 7. Errors and messages
 
@@ -116,8 +161,17 @@ store a second encoding on AST nodes.
 - Messages use `Display`, never `Debug`: `expected ')', found '{'`,
   `unexpected token in expression: 'endfunction'`. Never print Rust
   variant names.
+- **Recognize misplaced code, then report it.** A construct that is
+  well-formed but in the wrong place, such as a JASS `if` at the top
+  level, is parsed in full and kept in the AST. Lint then reports it
+  with the fix ("move it into a function"). The parse doesn't fail, so
+  the rest of the file still gets its tree, lint and highlighting, and
+  the message can say what to do instead of "unexpected token".
 - Lint returns shared `Diagnostic`s (`Level::Error` / `Warning`, a whole
-  line), sorted by line.
+  line), sorted by line. Each names its **rule** (`diagnostic::rule`), one
+  id per check across languages; `RULES` lists them with whether each is
+  on by default. A new check gets an id there, and a row in the rule
+  table of the `wc3-rs` README.
 
 ### 8. Parsing technique
 
@@ -170,14 +224,16 @@ store a second encoding on AST nodes.
 |--------------|-----------------------------------------------------------------------------------------|
 | `span`       | `Span` (1-based line, codepoint columns) + `ColumnEncoding` (UTF-16/UTF-8)              |
 | `cursor`     | `Cursor`: char-by-char lexer cursor with line/col, trivia/comment skipping              |
-| `literal`    | literal scanners: decimal/hex ints, reals, `"strings"`, `'rawcodes'`                    |
+| `literal`    | scanners: numbers per `NumberSpec`, quoted strings, rawcodes, Lua long brackets, heredocs |
 | `kind`       | `TokenKind`, `Kw` + `KwSet`, `Punct`, `Embedded` (an embedded-language block)           |
-| `lexer`      | `LexSpec`, `EmbedSpec`; `tokenize`/`tokenize_lossy` (+ comments) and their `_at` forms  |
+| `lexer`      | `LexSpec` (`LexSpec::BASE` + options), `EmbedSpec`; `tokenize`/`tokenize_lossy` (+ `_at`) |
 | `token`      | `Token<K>`, `ParseError`, `TokenStream<K>`, `TokenParser::left_assoc`                   |
 | `semantic`   | VS Code's 23 standard token types + 10 modifiers, legend, lexical layer, wire `encode`  |
-| `diagnostic` | lint `Diagnostic` + `Level`                                                             |
+| `directive`  | `header_directive`: per-file settings in header comments (`// @dialect vjass`)          |
+| `symbols`    | `Occurrence` (a declared or referenced name, its `SymbolKind`, `Scope` and namespace), and namespace lookup (`lookup_chain`, `resolve`): the input of the editor's symbol index |
+| `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`) |
 | `tree`       | labelled `Node` tree, `render_tree` (box drawing), `render_dot` (Graphviz)              |
-| `html`       | `render_html`: the self-contained offline AST viewer page                               |
+| `html`       | `render_html`: the offline AST viewer, source colored by the language's own lexer; `render_html_tokens` colors it from semantic tokens instead (BNI) |
 
 ## Adding a language or dialect
 
@@ -187,25 +243,39 @@ store a second encoding on AST nodes.
 2. **Operators.** Add missing operators to `Punct` and list the
    language's operators in its `LexSpec`. Matching is longest-first.
 3. **Lexical forms.** If the generic lexer lacks one, add it as a
-   `LexSpec` option rather than writing a separate lexer. Lua, for
-   example, will need single-quoted strings, `[[long strings]]` and
-   `--[[ ]]` comments.
-4. **The crate.** Give it the same layout as `jass-rs`/`zinc-rs`: `token`,
+   `LexSpec` option rather than writing a separate lexer. The options so
+   far:
+
+   | option                 | effect                                   | used by       |
+   |------------------------|------------------------------------------|---------------|
+   | `line_comment`         | line comment opener (`//`, `--`)         | all           |
+   | `block_comment`        | `/* */`-style block comments             | vJASS, Zinc, AS |
+   | `rawcodes`             | `'abcd'` packs into an integer, `'a'` is its byte | JASS, Zinc |
+   | `single_quote_strings` | `'...'` is a string                      | Lua, AS       |
+   | `long_brackets`        | `[[...]]` strings, `--[[ ]]` comments    | Lua           |
+   | `heredocs`             | `"""..."""` strings                | AS            |
+   | `numbers`              | exponents, `.5`, `0b`/`0o`/`0d`, `1.5f`  | per language  |
+   | `embeds`               | embedded-language blocks                 | vJASS         |
+4. **The crate.** Give it the same layout as the existing crates: `token`,
    `lexer`, `ast`, `parser`, `lint`, `printer`, `query`, `html`,
    `semantic`, `main`, plus a README with the syntax reference and parser
    status.
 5. **Editor.** Add the language to the server's `languageId` dispatch and
    to the extension's `LANGUAGES` / `package.json`.
 
-```rust
-use parser_rs::{Kw, KwSet, LexSpec, Punct};
+This is how `lua-rs` describes Lua (abridged):
 
-const LUA: LexSpec = LexSpec {
+```rust
+use parser_rs::{Kw, KwSet, LexSpec, NumberSpec, Punct};
+
+pub const SPEC: LexSpec = LexSpec {
     keywords: KwSet::of(&[Kw::Function, Kw::End, Kw::Local, Kw::Nil /* ... */]),
     line_comment: "--",
-    block_comment: None,
-    rawcodes: false,
+    single_quote_strings: true,
+    long_brackets: true,
+    numbers: NumberSpec { exponent: true, leading_dot: true, ..LexSpec::BASE.numbers },
     puncts: &[Punct::Plus, Punct::DotDot, Punct::TildeEq, Punct::Hash /* ... */],
+    ..LexSpec::BASE
 };
-let tokens = parser_rs::tokenize(src, &LUA)?;
+let tokens = parser_rs::tokenize(src, &SPEC)?;
 ```
