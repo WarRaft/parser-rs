@@ -126,6 +126,11 @@ pub mod rule {
     pub const IMPLICIT_SIGNATURE: &str = "implicit-signature";
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
+    pub const OBJECT_VALUE_TYPE: &str = "object-value-type";
+    pub const OBJECT_VALUE_RANGE: &str = "object-value-range";
+    pub const OBJECT_UNKNOWN_FIELD: &str = "object-unknown-field";
+    pub const OBJECT_FIELD_LEVEL: &str = "object-field-level";
+    pub const OBJECT_FIELD_OWNER: &str = "object-field-owner";
 }
 
 /// Group ids. Kebab-case, stable, never the same as a rule id.
@@ -314,6 +319,41 @@ pub const RULES: &[Rule] = &[
         enabled: false,
         summary: "a variable declared at the top level outside `globals ... endglobals`, where the game doesn't read it",
         groups: &[group::PURE],
+    },
+    Rule {
+        id: rule::OBJECT_VALUE_TYPE,
+        languages: &["Object data"],
+        enabled: true,
+        summary: "a value stored as another type than the game's metadata gives the field (`1` for a real, a number for a string): the game misreads it",
+        groups: &[],
+    },
+    Rule {
+        id: rule::OBJECT_VALUE_RANGE,
+        languages: &["Object data"],
+        enabled: true,
+        summary: "a number outside World Editor's limits for the field, or a flag other than 0 or 1",
+        groups: &[],
+    },
+    Rule {
+        id: rule::OBJECT_UNKNOWN_FIELD,
+        languages: &["Object data"],
+        enabled: true,
+        summary: "a field the game's metadata doesn't have, like one of a newer game version",
+        groups: &[],
+    },
+    Rule {
+        id: rule::OBJECT_FIELD_LEVEL,
+        languages: &["Object data"],
+        enabled: true,
+        summary: "a level or data column that doesn't fit the field: a level on a field without levels, none on one with, another column than its own",
+        groups: &[],
+    },
+    Rule {
+        id: rule::OBJECT_FIELD_OWNER,
+        languages: &["Object data"],
+        enabled: true,
+        summary: "a field of other objects: an ability's data of another ability, a units-only field of an item",
+        groups: &[],
     },
 ];
 
