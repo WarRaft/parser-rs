@@ -12,6 +12,8 @@
 //! switched together. A project setting for a group applies to each of its
 //! rules, unless the project sets that rule by name.
 
+use crate::span::Span;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Error,
@@ -31,19 +33,61 @@ impl Level {
 pub struct Diagnostic {
     pub level: Level,
     pub message: String,
-    /// 1-indexed line the diagnostic applies to (as a whole).
+    /// 1-indexed line the diagnostic applies to (as a whole), unless
+    /// `span` is more exact.
     pub line: usize,
     /// The id of the rule that produced it: one of [`rule`].
     pub rule: &'static str,
+    /// Exactly what it's about, when the rule knows: the editor marks this
+    /// instead of the whole `line`.
+    pub span: Option<Span>,
+    /// An edit that resolves it, which the editor offers as a quick fix.
+    pub fix: Option<Fix>,
+}
+
+/// A quick fix: a title for the menu and the edits that make it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fix {
+    pub title: String,
+    pub edits: Vec<Edit>,
+}
+
+/// Replace `span` (1-indexed codepoint columns, end exclusive; column 1
+/// of the next line to take a line's end with it) with `text`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Edit {
+    pub span: Span,
+    pub text: String,
+}
+
+impl Fix {
+    /// A fix that deletes `span`.
+    pub fn delete(title: impl Into<String>, span: Span) -> Self {
+        Fix { title: title.into(), edits: vec![Edit { span, text: String::new() }] }
+    }
 }
 
 impl Diagnostic {
+    /// Marks exactly `span` (its start line becomes `line`).
+    pub fn at(mut self, span: Span) -> Self {
+        self.line = span.start_line;
+        self.span = Some(span);
+        self
+    }
+
+    pub fn with_fix(mut self, fix: Fix) -> Self {
+        self.fix = Some(fix);
+        self
+    }
+
     pub fn error(rule: &'static str, message: impl Into<String>, line: usize) -> Self {
         Diagnostic {
             level: Level::Error,
             message: message.into(),
             line,
             rule,
+            span: None,
+            fix: None,
         }
     }
 
@@ -53,6 +97,8 @@ impl Diagnostic {
             message: message.into(),
             line,
             rule,
+            span: None,
+            fix: None,
         }
     }
 }

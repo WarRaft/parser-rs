@@ -168,7 +168,11 @@ store a second encoding on AST nodes.
   the rest of the file still gets its tree, lint and highlighting, and
   the message can say what to do instead of "unexpected token".
 - Lint returns shared `Diagnostic`s (`Level::Error` / `Warning`, a whole
-  line), sorted by line. Each names its **rule** (`diagnostic::rule`), one
+  line), sorted by line. A rule that knows exactly what it's about marks
+  that (`Diagnostic::at(span)`): an empty `else` is marked on `else`, not
+  on its `if`. A rule may offer a **fix** (`with_fix`, `Fix`: a title and
+  edits on spans), which the editor shows as a quick fix; the AST keeps
+  whatever spans the fix needs. Each names its **rule** (`diagnostic::rule`), one
   id per check across languages; `RULES` lists them with whether each is
   on by default. A new check gets an id there, and a row in the rule
   table of the `wc3-rs` README.
