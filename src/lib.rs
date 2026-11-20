@@ -37,7 +37,7 @@ pub mod token;
 pub mod tree;
 
 pub use cursor::Cursor;
-pub use diagnostic::{find_rule, rule, Diagnostic, Level, Rule, RULES};
+pub use diagnostic::{find_group, find_rule, group, rule, Diagnostic, Group, Level, Rule, GROUPS, RULES};
 pub use directive::header_directive;
 pub use html::{render_html, render_html_tokens, HtmlLang};
 pub use kind::{Embedded, Kw, KwSet, Punct, TokenKind};

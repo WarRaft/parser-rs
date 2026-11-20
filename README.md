@@ -172,6 +172,13 @@ store a second encoding on AST nodes.
   id per check across languages; `RULES` lists them with whether each is
   on by default. A new check gets an id there, and a row in the rule
   table of the `wc3-rs` README.
+- **Groups** (`diagnostic::group`, `GROUPS`) switch several rules at once;
+  a rule lists the groups it belongs to (`Rule::groups`). A group id is
+  never also a rule id. `pure` holds the checks for **pure JASS as the
+  game reads it**: what this toolchain accepts beyond the game's grammar
+  (such as left-out `takes` / `returns`) is fine by default and reported
+  once a project turns `pure` on. A relaxation of the game's grammar gets
+  a rule in `pure`, so a project that must stay game-exact can say so.
 
 ### 8. Parsing technique
 
@@ -231,7 +238,7 @@ store a second encoding on AST nodes.
 | `semantic`   | VS Code's 23 standard token types + 10 modifiers, legend, lexical layer, wire `encode`  |
 | `directive`  | `header_directive`: per-file settings in header comments (`// @dialect vjass`)          |
 | `symbols`    | `Occurrence` (a declared or referenced name, its `SymbolKind`, `Scope` and namespace), and namespace lookup (`lookup_chain`, `resolve`): the input of the editor's symbol index |
-| `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`) |
+| `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`); groups (`group`, `GROUPS`, `find_group`) |
 | `tree`       | labelled `Node` tree, `render_tree` (box drawing), `render_dot` (Graphviz)              |
 | `html`       | `render_html`: the offline AST viewer, source colored by the language's own lexer; `render_html_tokens` colors it from semantic tokens instead (BNI) |
 
