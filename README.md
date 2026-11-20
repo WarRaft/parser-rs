@@ -3,8 +3,9 @@
 Language-agnostic building blocks shared by this author's hand-written
 parsers: [`jass-rs`](../jass-rs) (JASS and vJASS), [`zinc-rs`](../zinc-rs),
 [`lua-rs`](../lua-rs) (Lua 5.3), [`as-rs`](../as-rs) (AngelScript) and
-[`bni-rs`](../bni-rs) (BNI, the Warcraft III data-file format). Their
-consumer is the
+[`bni-rs`](../bni-rs) (BNI, the Warcraft III data-file format), and the
+readers of the game's binary files: [`w3abdhqtu-rs`](../w3abdhqtu-rs)
+(object data). Their consumer is the
 [`wc3-rs`](../wc3-rs) VS Code extension.
 
 This README is the **design reference** for all of them: how a parser
@@ -227,6 +228,34 @@ store a second encoding on AST nodes.
   what isn't yet, and the lint rules.
 - Code comments and docs are in English.
 
+### 12. Binary formats
+
+The game's binary files (object data, `war3map.w3i`, `.doo`, ...) get a
+crate each, like a language, built on the `bin` module:
+
+- **Read field by field** with `bin::Reader`, the way the format is laid
+  out. No derive macros or generic schema: the layouts branch on version
+  and file type (`.w3d` has levels only since version 2), and plain code
+  says so most clearly.
+- **Errors carry the byte offset** (`BinError`) and say what was wrong in
+  words: `field uhpm has unknown value type 7 (at byte 0x18)`. A count
+  is checked against the bytes left (`Reader::count`), so a corrupt file
+  fails instead of allocating gigabytes. Strings are UTF-8; anything else
+  is an error, not a lossy guess.
+- **Reading and writing are exact.** Each crate writes with
+  `bin::Writer`, and `write(parse(bytes)) == bytes` for every real file.
+  Whatever the format stores, the data model keeps, even values the game
+  ignores, so the editor can show a file as text and save it back
+  without changing a byte it didn't mean to. Bytes after the end of the
+  data are an error.
+- **`Rawcode`** is the shared four-character id. It displays as its
+  characters (`hfoo`) or, when one isn't printable, as `0x` and the
+  big-endian value, the way JASS writes `'hfoo'`; `Rawcode::parse`
+  reads both back.
+- **Tested on real files.** Unit tests build files byte by byte; a
+  `corpus` test (ignored by default) checks the round trip over a folder
+  of files taken from real maps.
+
 ---
 
 ## Modules
@@ -244,6 +273,7 @@ store a second encoding on AST nodes.
 | `symbols`    | `Occurrence` (a declared or referenced name, its `SymbolKind`, `Scope` and namespace), and namespace lookup (`lookup_chain`, `resolve`): the input of the editor's symbol index |
 | `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`); groups (`group`, `GROUPS`, `find_group`) |
 | `tree`       | labelled `Node` tree, `render_tree` (box drawing), `render_dot` (Graphviz)              |
+| `bin`        | binary files: little-endian `Reader` / `Writer`, `BinError` (message + byte offset), `Rawcode` |
 | `html`       | `render_html`: the offline AST viewer, source colored by the language's own lexer; `render_html_tokens` colors it from semantic tokens instead (BNI) |
 
 ## Adding a language or dialect

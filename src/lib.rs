@@ -17,12 +17,15 @@
 //! - [`directive`]: per-file settings in header comments (`// @dialect jass`);
 //! - [`diagnostic`]: lint [`Diagnostic`]s and their [`Level`];
 //! - [`tree`]: a labelled [`Node`] tree plus text/Graphviz renderers;
-//! - [`html`]: the self-contained, offline AST viewer page.
+//! - [`html`]: the self-contained, offline AST viewer page;
+//! - [`bin`]: for binary data files: a little-endian [`Reader`] and
+//!   [`Writer`], [`BinError`] with its byte offset, and [`Rawcode`].
 //!
 //! Each language crate keeps only what's actually language-specific: its
 //! keywords and [`LexSpec`], AST, grammar, lint rules, and AST → [`Node`]
 //! mapping.
 
+pub mod bin;
 pub mod cursor;
 pub mod diagnostic;
 pub mod directive;
@@ -36,6 +39,7 @@ pub mod symbols;
 pub mod token;
 pub mod tree;
 
+pub use bin::{BinError, BinResult, Rawcode, Reader, Writer};
 pub use cursor::Cursor;
 pub use diagnostic::{find_group, find_rule, group, rule, Diagnostic, Edit, Fix, Group, Level, Rule, GROUPS, RULES};
 pub use directive::header_directive;
