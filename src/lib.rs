@@ -41,7 +41,9 @@ pub mod tree;
 
 pub use bin::{BinError, BinResult, Rawcode, Reader, Writer};
 pub use cursor::Cursor;
-pub use diagnostic::{find_group, find_rule, group, rule, Diagnostic, Edit, Fix, Group, Level, Rule, GROUPS, RULES};
+pub use diagnostic::{
+    apply_edits, find_group, find_rule, group, rule, Diagnostic, Edit, Fix, Group, Level, Rule, GROUPS, RULES,
+};
 pub use directive::header_directive;
 pub use html::{render_html, render_html_tokens, HtmlLang};
 pub use kind::{Embedded, Kw, KwSet, Punct, TokenKind};

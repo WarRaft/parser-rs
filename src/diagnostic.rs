@@ -60,6 +60,39 @@ pub struct Edit {
     pub text: String,
 }
 
+/// `src` with `edits` applied together: their spans (1-based lines,
+/// character columns, end exclusive) are all on `src` as it is, and don't
+/// overlap. For tools that change a file through edits, as an editor
+/// would, and for their tests.
+pub fn apply_edits(src: &str, edits: &[Edit]) -> String {
+    let chars: Vec<char> = src.chars().collect();
+    let mut line_starts = vec![0];
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '\n' {
+            line_starts.push(i + 1);
+        }
+    }
+    let offset = |line: usize, col: usize| {
+        line_starts
+            .get(line.saturating_sub(1))
+            .map_or(chars.len(), |s| (s + col.saturating_sub(1)).min(chars.len()))
+    };
+    let mut ranges: Vec<(usize, usize, &str)> = edits
+        .iter()
+        .map(|e| (offset(e.span.start_line, e.span.start_col), offset(e.span.end_line, e.span.end_col), e.text.as_str()))
+        .collect();
+    ranges.sort_by_key(|r| (r.0, r.1));
+    let mut out = String::new();
+    let mut pos = 0;
+    for (start, end, text) in ranges {
+        out.extend(&chars[pos..start.max(pos)]);
+        out += text;
+        pos = end.max(pos);
+    }
+    out.extend(&chars[pos..]);
+    out
+}
+
 impl Fix {
     /// A fix that deletes `span`.
     pub fn delete(title: impl Into<String>, span: Span) -> Self {
@@ -133,6 +166,7 @@ pub mod rule {
     pub const OBJECT_FIELD_OWNER: &str = "object-field-owner";
     pub const DUPLICATE_CELL: &str = "duplicate-cell";
     pub const CELL_OUTSIDE_BOUNDS: &str = "cell-outside-bounds";
+    pub const DUPLICATE_STRING: &str = "duplicate-string";
 }
 
 /// Group ids. Kebab-case, stable, never the same as a rule id.
@@ -369,6 +403,13 @@ pub const RULES: &[Rule] = &[
         languages: &["SLK"],
         enabled: true,
         summary: "a cell past the size the B record gives, which readers that trust B lose",
+        groups: &[],
+    },
+    Rule {
+        id: rule::DUPLICATE_STRING,
+        languages: &["WTS"],
+        enabled: true,
+        summary: "a string number defined twice in a string table",
         groups: &[],
     },
 ];

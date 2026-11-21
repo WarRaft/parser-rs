@@ -271,7 +271,7 @@ crate each, like a language, built on the `bin` module:
 | `semantic`   | VS Code's 23 standard token types + 10 modifiers, legend, lexical layer, wire `encode`  |
 | `directive`  | `header_directive`: per-file settings in header comments (`// @dialect vjass`)          |
 | `symbols`    | `Occurrence` (a declared or referenced name, its `SymbolKind`, `Scope` and namespace), and namespace lookup (`lookup_chain`, `resolve`): the input of the editor's symbol index |
-| `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`); groups (`group`, `GROUPS`, `find_group`) |
+| `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`); groups (`group`, `GROUPS`, `find_group`); `Edit` / `Fix`, and `apply_edits` to apply edits to a text |
 | `tree`       | labelled `Node` tree, `render_tree` (box drawing), `render_dot` (Graphviz)              |
 | `bin`        | binary files: little-endian `Reader` / `Writer`, `BinError` (message + byte offset), `Rawcode` |
 | `html`       | `render_html`: the offline AST viewer, source colored by the language's own lexer; `render_html_tokens` colors it from semantic tokens instead (BNI) |
