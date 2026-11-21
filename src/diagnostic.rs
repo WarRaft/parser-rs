@@ -131,6 +131,8 @@ pub mod rule {
     pub const OBJECT_UNKNOWN_FIELD: &str = "object-unknown-field";
     pub const OBJECT_FIELD_LEVEL: &str = "object-field-level";
     pub const OBJECT_FIELD_OWNER: &str = "object-field-owner";
+    pub const DUPLICATE_CELL: &str = "duplicate-cell";
+    pub const CELL_OUTSIDE_BOUNDS: &str = "cell-outside-bounds";
 }
 
 /// Group ids. Kebab-case, stable, never the same as a rule id.
@@ -353,6 +355,20 @@ pub const RULES: &[Rule] = &[
         languages: &["Object data"],
         enabled: true,
         summary: "a field of other objects: an ability's data of another ability, a units-only field of an item",
+        groups: &[],
+    },
+    Rule {
+        id: rule::DUPLICATE_CELL,
+        languages: &["SLK"],
+        enabled: true,
+        summary: "a cell set by two records; the later one wins",
+        groups: &[],
+    },
+    Rule {
+        id: rule::CELL_OUTSIDE_BOUNDS,
+        languages: &["SLK"],
+        enabled: true,
+        summary: "a cell past the size the B record gives, which readers that trust B lose",
         groups: &[],
     },
 ];
