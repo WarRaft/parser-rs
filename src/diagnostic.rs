@@ -326,7 +326,7 @@ pub const RULES: &[Rule] = &[
         id: rule::OBJECT_VALUE_TYPE,
         languages: &["Object data"],
         enabled: true,
-        summary: "a value stored as another type than the game's metadata gives the field (`1` for a real, a number for a string): the game misreads it",
+        summary: "a value stored as another type than the game's metadata gives the field (a number for a string, `int 6` for an unreal): the game misreads it",
         groups: &[],
     },
     Rule {
