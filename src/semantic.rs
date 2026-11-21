@@ -293,12 +293,28 @@ pub fn comment_tokens_at(comments: &[Span], source: &str, first_line: usize) -> 
 /// it is dropped, and so is an empty one.
 pub fn encode(tokens: Vec<SemanticToken>, source: &str) -> Vec<u32> {
     let lines: Vec<&str> = source.lines().collect();
-    let mut tokens: Vec<SemanticToken> =
-        tokens.into_iter().flat_map(|t| t.split_lines(&lines)).collect();
-    tokens.sort_by_key(|t| (t.line, t.start_col));
+    // Most tokens sit on one line: only the others are split, so most need
+    // no allocation of their own.
+    let mut split = Vec::with_capacity(tokens.len());
+    for t in tokens {
+        if t.end_line <= t.line {
+            split.push(t);
+        } else {
+            split.extend(t.split_lines(&lines));
+        }
+    }
+    let mut tokens = split;
+    if !tokens.is_sorted_by_key(|t| (t.line, t.start_col)) {
+        tokens.sort_by_key(|t| (t.line, t.start_col));
+    }
+    // On an ASCII line a column is its UTF-16 offset; others are counted.
+    let ascii: Vec<bool> = lines.iter().map(|l| l.is_ascii()).collect();
     let utf16 = |line: usize, col: usize| {
-        let text = lines.get(line.wrapping_sub(1)).copied().unwrap_or("");
-        ColumnEncoding::Utf16.from_codepoints(text, col) - 1
+        let i = line.wrapping_sub(1);
+        if ascii.get(i).copied().unwrap_or(true) {
+            return col - 1;
+        }
+        ColumnEncoding::Utf16.from_codepoints(lines[i], col) - 1
     };
 
     let mut data = Vec::with_capacity(tokens.len() * 5);
