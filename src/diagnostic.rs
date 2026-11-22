@@ -160,6 +160,9 @@ pub mod rule {
     pub const IMPLICIT_KEYWORD: &str = "implicit-keyword";
     pub const UNKNOWN_NAME: &str = "unknown-name";
     pub const ARGUMENT_COUNT: &str = "argument-count";
+    pub const TYPE_MISMATCH: &str = "type-mismatch";
+    pub const ARRAY_ACCESS: &str = "array-access";
+    pub const CONSTANT_ASSIGNMENT: &str = "constant-assignment";
     pub const MERGED_FUNCTION: &str = "merged-function";
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
@@ -358,6 +361,27 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS"],
         enabled: true,
         summary: "a call with more or fewer arguments than its function takes, or a code value of a function that takes some",
+        groups: &[],
+    },
+    Rule {
+        id: rule::TYPE_MISMATCH,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a value of the wrong type: an argument, a value set or returned, a condition, an operator's side",
+        groups: &[],
+    },
+    Rule {
+        id: rule::ARRAY_ACCESS,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "an array used without its index, or an index of what isn't an array",
+        groups: &[],
+    },
+    Rule {
+        id: rule::CONSTANT_ASSIGNMENT,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a constant set",
         groups: &[],
     },
     Rule {
