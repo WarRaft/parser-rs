@@ -158,6 +158,8 @@ pub mod rule {
     pub const UNTERMINATED_STRING: &str = "unterminated-string";
     pub const IMPLICIT_SIGNATURE: &str = "implicit-signature";
     pub const IMPLICIT_KEYWORD: &str = "implicit-keyword";
+    pub const UNKNOWN_NAME: &str = "unknown-name";
+    pub const ARGUMENT_COUNT: &str = "argument-count";
     pub const MERGED_FUNCTION: &str = "merged-function";
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
@@ -343,6 +345,20 @@ pub const RULES: &[Rule] = &[
         enabled: false,
         summary: "a function or native without `takes` or `returns`, which the game requires",
         groups: &[group::PURE],
+    },
+    Rule {
+        id: rule::UNKNOWN_NAME,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a function, variable or type declared nowhere: in the file, the project or the game's scripts",
+        groups: &[],
+    },
+    Rule {
+        id: rule::ARGUMENT_COUNT,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a call with more or fewer arguments than its function takes, or a code value of a function that takes some",
+        groups: &[],
     },
     Rule {
         id: rule::IMPLICIT_KEYWORD,
