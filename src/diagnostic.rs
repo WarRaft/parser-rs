@@ -348,7 +348,7 @@ pub const RULES: &[Rule] = &[
         id: rule::IMPLICIT_KEYWORD,
         languages: &["JASS"],
         enabled: false,
-        summary: "an assignment without `set` or a call without `call`, which the game requires",
+        summary: "an assignment without `set`, a call without `call` or a local without `local`, which the game requires",
         groups: &[group::PURE],
     },
     Rule {
