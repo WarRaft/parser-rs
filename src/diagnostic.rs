@@ -157,6 +157,8 @@ pub mod rule {
     pub const UNCLOSED_SECTION_HEADER: &str = "unclosed-section-header";
     pub const UNTERMINATED_STRING: &str = "unterminated-string";
     pub const IMPLICIT_SIGNATURE: &str = "implicit-signature";
+    pub const IMPLICIT_KEYWORD: &str = "implicit-keyword";
+    pub const MERGED_FUNCTION: &str = "merged-function";
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
     pub const OBJECT_VALUE_TYPE: &str = "object-value-type";
@@ -340,6 +342,20 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS"],
         enabled: false,
         summary: "a function or native without `takes` or `returns`, which the game requires",
+        groups: &[group::PURE],
+    },
+    Rule {
+        id: rule::IMPLICIT_KEYWORD,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "an assignment without `set` or a call without `call`, which the game requires",
+        groups: &[group::PURE],
+    },
+    Rule {
+        id: rule::MERGED_FUNCTION,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "more than one `main` or `config`, which the build merges into one; the game reads one",
         groups: &[group::PURE],
     },
     Rule {

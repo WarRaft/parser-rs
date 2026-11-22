@@ -18,6 +18,8 @@ fn off_by_default() {
         vec![
             rule::INFINITE_LOOP,
             rule::IMPLICIT_SIGNATURE,
+            rule::IMPLICIT_KEYWORD,
+            rule::MERGED_FUNCTION,
             rule::DECLARATION_AFTER_FUNCTION,
             rule::GLOBAL_OUTSIDE_GLOBALS,
         ]
