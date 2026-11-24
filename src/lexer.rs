@@ -112,12 +112,26 @@ pub struct EmbedSpec {
     pub lang: &'static str,
     pub open: &'static str,
     pub close: &'static str,
+    /// The opening directive is only the start of its line, more after it
+    /// (`//! textmacro NAME takes a, b`); else the whole line.
+    pub prefix: bool,
 }
 
 /// Whether `line` is the directive `directive`, ignoring all whitespace.
 fn is_directive(line: &str, directive: &str) -> bool {
     let squeeze = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
     squeeze(line) == squeeze(directive)
+}
+
+/// Whether `line` starts with the directive `directive` (`//! textmacro`):
+/// the same marker, then its word or the word with `_once`, then anything
+/// (`//! textmacro X takes a`, `//!textmacro_once X`; not `//! textmacros`).
+fn starts_with_directive(line: &str, directive: &str) -> bool {
+    let Some((marker, word)) = directive.split_once(char::is_whitespace) else { return is_directive(line, directive) };
+    let Some(rest) = line.trim_start().strip_prefix(marker) else { return false };
+    let first = rest.split_whitespace().next().unwrap_or("");
+    let word = word.trim();
+    first == word || first.strip_prefix(word) == Some("_once")
 }
 
 /// The embed whose opening directive the cursor sits on, if any.
@@ -130,7 +144,7 @@ fn embed_at(cur: &Cursor, spec: &LexSpec) -> Option<EmbedSpec> {
     spec.embeds
         .iter()
         .copied()
-        .find(|e| is_directive(&line, e.open))
+        .find(|e| if e.prefix { starts_with_directive(&line, e.open) } else { is_directive(&line, e.open) })
 }
 
 /// Consumes an embedded block, from its opening directive (under the

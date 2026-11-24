@@ -111,6 +111,7 @@ const HOST: LexSpec = LexSpec {
         lang: "zinc",
         open: "//! zinc",
         close: "//! endzinc",
+        prefix: false,
     }],
     ..SPEC
 };

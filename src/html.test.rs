@@ -18,6 +18,7 @@ static HOST: LexSpec = LexSpec {
         lang: "inner",
         open: "//! inner",
         close: "//! endinner",
+        prefix: false,
     }],
     ..LexSpec::BASE
 };
