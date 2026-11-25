@@ -389,7 +389,7 @@ pub const RULES: &[Rule] = &[
         id: rule::ARRAY_STRUCT,
         languages: &["JASS"],
         enabled: true,
-        summary: "what a struct `extends array` can't have or do (JassHelper's manual): a member's default value, an array member, `onDestroy`, `allocate`, `create` not its own, `destroy`, `deallocate`",
+        summary: "what a struct `extends array` can't have or do, its instances only numbers that nothing creates or destroys: a member's default value, an array member, `onDestroy` (its own or a module's), `allocate`, `create`, `destroy`, `deallocate` not its own",
         groups: &[],
     },
     Rule {
