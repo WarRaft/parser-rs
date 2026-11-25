@@ -163,6 +163,7 @@ pub mod rule {
     pub const TYPE_MISMATCH: &str = "type-mismatch";
     pub const ARRAY_ACCESS: &str = "array-access";
     pub const CONSTANT_ASSIGNMENT: &str = "constant-assignment";
+    pub const ARRAY_STRUCT: &str = "array-struct";
     pub const MERGED_FUNCTION: &str = "merged-function";
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
@@ -382,6 +383,13 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS"],
         enabled: true,
         summary: "a constant set",
+        groups: &[],
+    },
+    Rule {
+        id: rule::ARRAY_STRUCT,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "what a struct `extends array` can't have or do (JassHelper's manual): a member's default value, an array member, `onDestroy`, `allocate`, `create` not its own, `destroy`, `deallocate`",
         groups: &[],
     },
     Rule {
