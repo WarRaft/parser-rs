@@ -61,6 +61,8 @@ pub struct LexSpec {
     pub long_brackets: bool,
     /// AngelScript `"""heredoc"""` strings.
     pub heredocs: bool,
+    /// Block comments nest (vJASS: `/* a /* b */ c */` is one comment).
+    pub nested_block_comments: bool,
 }
 
 impl LexSpec {
@@ -86,6 +88,7 @@ impl LexSpec {
         single_quote_strings: false,
         long_brackets: false,
         heredocs: false,
+        nested_block_comments: false,
     };
 }
 
@@ -271,6 +274,7 @@ fn next_token(
         cur.skip_trivia_collecting(
             spec.line_comment,
             spec.block_comment,
+            spec.nested_block_comments,
             Some(comments),
             &|c| embed_at(c, spec).is_some() || long_comment_at(c, spec),
         )?;

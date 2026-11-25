@@ -128,7 +128,7 @@ impl Cursor {
         line_comment: &str,
         block_comment: Option<(&str, &str)>,
     ) -> Result<(), ParseError> {
-        self.skip_trivia_collecting(line_comment, block_comment, None, &|_| false)
+        self.skip_trivia_collecting(line_comment, block_comment, false, None, &|_| false)
     }
 
     /// [`skip_trivia`](Self::skip_trivia) that also records each skipped
@@ -136,10 +136,13 @@ impl Cursor {
     /// unterminated block comment is still recorded, up to end of input.
     /// Stops early, before consuming anything, wherever `stop` holds (e.g.
     /// on an embedded-language directive that looks like a comment).
+    /// `nested`: a block comment inside one is a comment of its own, the
+    /// outer one ending at its own close (vJASS's `/* a /* b */ c */`).
     pub fn skip_trivia_collecting(
         &mut self,
         line_comment: &str,
         block_comment: Option<(&str, &str)>,
+        nested: bool,
         mut comments: Option<&mut Vec<Span>>,
         stop: &dyn Fn(&Cursor) -> bool,
     ) -> Result<(), ParseError> {
@@ -164,7 +167,19 @@ impl Cursor {
                 _ => match block_comment {
                     Some((open, close)) if self.starts_with(open) => {
                         self.eat_str(open);
-                        while !self.eat_str(close) {
+                        let mut depth = 1;
+                        loop {
+                            if self.eat_str(close) {
+                                depth -= 1;
+                                if depth == 0 {
+                                    break;
+                                }
+                                continue;
+                            }
+                            if nested && self.eat_str(open) {
+                                depth += 1;
+                                continue;
+                            }
                             if self.advance().is_none() {
                                 if let Some(out) = comments.as_deref_mut() {
                                     out.push(Span::new(line, col, self.line, self.col));
