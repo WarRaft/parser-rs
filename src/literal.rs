@@ -116,6 +116,26 @@ pub fn string(cur: &mut Cursor, line: usize, col: usize) -> Result<String, Parse
     quoted(cur, '"', line, col)
 }
 
+/// Scans a `"..."` string without escapes: everything up to the next `"`
+/// on the line, backslashes included. A line break ends it with an error.
+pub fn raw(cur: &mut Cursor, line: usize, col: usize) -> Result<String, ParseError> {
+    cur.advance(); // opening quote
+    let mut s = String::new();
+    loop {
+        match cur.peek() {
+            None | Some('\n') => return Err(ParseError::at("unterminated string literal", line, col)),
+            Some('"') => {
+                cur.advance();
+                return Ok(s);
+            }
+            Some(c) => {
+                s.push(c);
+                cur.advance();
+            }
+        }
+    }
+}
+
 /// Scans a string delimited by `quote` (`"` or `'`), decoding escapes:
 /// `\n \t \r \a \b \f \v \\ \" \'`, `\xHH`, `\ddd` (decimal, up to 3
 /// digits), `\u{H..}` and `\uHHHH`. `\z` skips following whitespace (Lua),

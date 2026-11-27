@@ -2,8 +2,9 @@
 
 Language-agnostic building blocks shared by this author's hand-written
 parsers: [`jass-rs`](../jass-rs) (JASS and vJASS), [`zinc-rs`](../zinc-rs),
-[`lua-rs`](../lua-rs) (Lua 5.3), [`as-rs`](../as-rs) (AngelScript) and
-[`bni-rs`](../bni-rs) (BNI, the Warcraft III data-file format), and the
+[`lua-rs`](../lua-rs) (Lua 5.3), [`as-rs`](../as-rs) (AngelScript),
+[`bni-rs`](../bni-rs) (BNI, the Warcraft III data-file format) and
+[`fdf-rs`](../fdf-rs) (FDF, the game's frame definitions), and the
 readers of the game's binary files: [`w3abdhqtu-rs`](../w3abdhqtu-rs)
 (object data). Their consumer is the
 [`wc3-rs`](../wc3-rs) VS Code extension.
@@ -61,6 +62,13 @@ declares its dialect in a header comment, read by
   lines.
 - **Safe for other tools.** The setting is an ordinary comment, so
   JassHelper, the game and other tools ignore it.
+
+**A format whose words are data has no keywords.** In FDF, `Frame`,
+`Width`, `INHERITS` and `TOPLEFT` are names the game gives a meaning to,
+not grammar: its `LexSpec` activates no keyword, and one rule parses
+every statement (name, values, an optional block), whatever its name.
+Never hardcode the names such a format happens to use today; the
+program that reads the document decides what a name means.
 
 So an optional dialect (vJASS on top of JASS) is **not a second parser**.
 It's a bigger keyword set, maybe extra puncts and comment forms, plus
@@ -194,7 +202,9 @@ store a second encoding on AST nodes.
   README. For example, JASS and Zinc bind `and`/`&&` *looser* than
   `or`/`||`.
 - Literals use the shared scanners (`literal`): decimal and hex ints,
-  reals, `"strings"` with escapes, `'rawcodes'`.
+  reals, `"strings"` with escapes, `'rawcodes'`. A language whose
+  strings are paths (FDF) sets `raw_strings`: no escapes, a backslash
+  is itself.
 
 ### 9. Editor integration (VS Code)
 

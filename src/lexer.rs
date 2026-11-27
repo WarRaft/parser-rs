@@ -63,6 +63,9 @@ pub struct LexSpec {
     pub heredocs: bool,
     /// Block comments nest (vJASS: `/* a /* b */ c */` is one comment).
     pub nested_block_comments: bool,
+    /// `"..."` holds no escapes: a backslash is itself (FDF, whose strings
+    /// are file paths: `"UI\FrameDef\UI\EscMenuTemplates.fdf"`).
+    pub raw_strings: bool,
 }
 
 impl LexSpec {
@@ -89,6 +92,7 @@ impl LexSpec {
         long_brackets: false,
         heredocs: false,
         nested_block_comments: false,
+        raw_strings: false,
     };
 }
 
@@ -314,7 +318,7 @@ fn next_token(
     } else if c == '"' && spec.heredocs && cur.starts_with("\"\"\"") {
         TokenKind::Str(literal::heredoc(cur, line, col)?)
     } else if c == '"' {
-        TokenKind::Str(literal::quoted(cur, '"', line, col)?)
+        TokenKind::Str(if spec.raw_strings { literal::raw(cur, line, col)? } else { literal::quoted(cur, '"', line, col)? })
     } else if c == '\'' && spec.rawcodes {
         TokenKind::Int(literal::rawcode(cur, line, col)?)
     } else if c == '\'' && spec.single_quote_strings {

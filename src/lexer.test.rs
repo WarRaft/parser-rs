@@ -225,3 +225,11 @@ fn heredocs_and_unterminated_long_comments() {
     assert_eq!(lexed.errors[0].message, "unterminated long comment");
     assert_eq!(lexed.comments, vec![Span::new(1, 1, 1, 11)]);
 }
+
+#[test]
+fn raw_strings_keep_backslashes() {
+    let spec = LexSpec { raw_strings: true, ..LexSpec::BASE };
+    let toks = tokenize("\"UI\\FrameDef\\new\"", &spec).unwrap();
+    assert_eq!(toks[0].kind, TokenKind::Str("UI\\FrameDef\\new".into()));
+    assert_eq!(tokenize_lossy("\"open\n", &spec).errors[0].message, "unterminated string literal");
+}
