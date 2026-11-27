@@ -68,7 +68,9 @@ declares its dialect in a header comment, read by
 not grammar: its `LexSpec` activates no keyword, and one rule parses
 every statement (name, values, an optional block), whatever its name.
 Never hardcode the names such a format happens to use today; the
-program that reads the document decides what a name means.
+program that reads the document decides what a name means. Its names
+(FDF's frames and keys, declared by a statement's shape) are symbols
+in `Scope::Data`: matched by name across the files, apart from code's.
 
 So an optional dialect (vJASS on top of JASS) is **not a second parser**.
 It's a bigger keyword set, maybe extra puncts and comment forms, plus

@@ -22,6 +22,12 @@
 //!   Telling which type `obj.value` belongs to takes type inference, so members are matched by name across the
 //!   project, in their own namespace: every `value` field and every
 //!   `.value` are one symbol, apart from any global `value`.
+//! - [`Scope::Data`]: a name a data format declares and its strings refer
+//!   to (FDF's frames and string keys: `INHERITS "EscMenuButtonTemplate"`),
+//!   matched by name across the files that see each other, apart from
+//!   code's names. Its `namespace` is the name of the block it's declared
+//!   in (a frame's parent), for the outline; it doesn't take part in
+//!   matching.
 
 /// What a name is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -49,6 +55,10 @@ pub enum SymbolKind {
     Class,
     Enum,
     EnumMember,
+    /// An FDF frame (`Frame "TEXT" "Title"`, `Texture "Icon"`).
+    Frame,
+    /// A key of a data format's string table (FDF's `StringList`).
+    Key,
 }
 
 impl SymbolKind {
@@ -71,6 +81,8 @@ impl SymbolKind {
             SymbolKind::Class => "class",
             SymbolKind::Enum => "enum",
             SymbolKind::EnumMember => "enum member",
+            SymbolKind::Frame => "frame",
+            SymbolKind::Key => "key",
         }
     }
 
@@ -87,6 +99,7 @@ pub enum Scope {
     Project,
     Local(u32),
     Member,
+    Data,
 }
 
 /// One name in the source: a declaration or a reference.

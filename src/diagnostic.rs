@@ -352,9 +352,9 @@ pub const RULES: &[Rule] = &[
     },
     Rule {
         id: rule::UNKNOWN_NAME,
-        languages: &["JASS"],
+        languages: &["JASS", "FDF"],
         enabled: true,
-        summary: "a function, variable or type declared nowhere: in the file, the project or the game's scripts",
+        summary: "a function, variable or type declared nowhere: in the file, the project or the game's scripts; a frame an FDF block inherits (`INHERITS \"Template\"`) that no frame file declares",
         groups: &[],
     },
     Rule {
