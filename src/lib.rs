@@ -15,6 +15,7 @@
 //! - [`semantic`]: VS Code's standard semantic token types/modifiers, the
 //!   shared lexical highlighting and the editor wire encoding;
 //! - [`directive`]: per-file settings in header comments (`// @dialect jass`);
+//! - [`format`]: formatting that only re-indents lines ([`Indent`]);
 //! - [`diagnostic`]: lint [`Diagnostic`]s and their [`Level`];
 //! - [`tree`]: a labelled [`Node`] tree plus text/Graphviz renderers;
 //! - [`html`]: the self-contained, offline AST viewer page;
@@ -29,6 +30,7 @@ pub mod bin;
 pub mod cursor;
 pub mod diagnostic;
 pub mod directive;
+pub mod format;
 pub mod html;
 pub mod kind;
 pub mod lexer;
@@ -46,6 +48,7 @@ pub use diagnostic::{
     apply_edits, find_group, find_rule, group, rule, Diagnostic, Edit, Fix, Group, Level, Rule, GROUPS, RULES,
 };
 pub use directive::header_directive;
+pub use format::{BraceStyle, Indent};
 pub use html::{render_html, render_html_tokens, HtmlLang};
 pub use kind::{Embedded, Kw, KwSet, Punct, TokenKind};
 pub use literal::NumberSpec;

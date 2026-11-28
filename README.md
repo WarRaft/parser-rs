@@ -287,6 +287,36 @@ crate each, like a language, built on the `bin` module:
   `corpus` test (ignored by default) checks the round trip over a folder
   of files taken from real maps.
 
+### 13. Formatting only moves lines
+
+A formatter (`format`) never adds, removes, joins or splits a line: it
+moves each one left or right to its level, and changes nothing but the
+spaces and tabs a line starts with. So a formatted file's diff is its
+indentation alone, and every line number (a diagnostic's, a map's script
+error, a breakpoint) still means the same line.
+
+- **A language gives levels, the shared code the edits.** A language
+  says where each line goes (`Indent`: `Level(n)`, `Keep`, `Follow(line)`);
+  `format::edits` turns that into edits of the lines it changes, each
+  level the editor's unit (spaces or a tab), for a whole file or a range
+  of lines. A line of whitespace alone is emptied.
+- **Tokens, not the AST**, read tolerantly (`tokenize_lossy`): code
+  that doesn't parse, as it's typed, formats too.
+- **What isn't code's layout doesn't move by itself.** A line a string
+  goes on into stays (`Keep`: its whitespace is the string's); a line a
+  block comment goes on into moves with the comment's first line
+  (`Follow`), keeping its own alignment (`literal_lines`).
+- **`{ }` languages share one engine** (`format::braces`, Zinc and
+  AngelScript): a line inside a bracket is a level deeper than the line
+  the bracket opened on (brackets opened on one line count once), a line
+  starting with closing brackets stands where the first of them opened
+  (`});` under `function() {`), and a statement going on to the next line
+  (the line before doesn't end in `;`, `{`, `}`, `,` or `:`) is one
+  deeper. `BraceStyle` holds what brackets can't say (`case` labels).
+  A keyword language (JASS) counts its own blocks.
+- **Embedded blocks format as their language**, at their directives'
+  level (`indents_at(src, first_line, base)`).
+
 ---
 
 ## Modules
@@ -303,6 +333,7 @@ crate each, like a language, built on the `bin` module:
 | `directive`  | `header_directive`: per-file settings in header comments (`// @dialect vjass`)          |
 | `symbols`    | `Occurrence` (a declared or referenced name, its `SymbolKind`, `Scope` and namespace), and namespace lookup (`lookup_chain`, `resolve`): the input of the editor's symbol index |
 | `diagnostic` | lint `Diagnostic` + `Level`; rule ids (`rule`) and the rule list (`RULES`, `find_rule`); groups (`group`, `GROUPS`, `find_group`); `Edit` / `Fix`, and `apply_edits` to apply edits to a text |
+| `format`     | formatting that only re-indents lines: `Indent` per line, `edits` (a file or a range of lines), `braces` (`{ }` languages, `BraceStyle`), `literal_lines` |
 | `tree`       | labelled `Node` tree, `render_tree` (box drawing), `render_dot` (Graphviz)              |
 | `bin`        | binary files: little-endian `Reader` / `Writer`, `BinError` (message + byte offset), `Rawcode` |
 | `html`       | `render_html`: the offline AST viewer, source colored by the language's own lexer; `render_html_tokens` colors it from semantic tokens instead (BNI) |
