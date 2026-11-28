@@ -66,6 +66,11 @@ pub struct LexSpec {
     /// `"..."` holds no escapes: a backslash is itself (FDF, whose strings
     /// are file paths: `"UI\FrameDef\UI\EscMenuTemplates.fdf"`).
     pub raw_strings: bool,
+    /// JASS's strings and rawcodes, as the game reads them: a quote takes
+    /// everything up to the one that closes it, line breaks included (the
+    /// one place a line break doesn't end a statement), and a string's only
+    /// escapes are `\\` and `\"` (see `literal::quoted`).
+    pub jass_literals: bool,
 }
 
 impl LexSpec {
@@ -93,6 +98,7 @@ impl LexSpec {
         heredocs: false,
         nested_block_comments: false,
         raw_strings: false,
+        jass_literals: false,
     };
 }
 
@@ -318,11 +324,11 @@ fn next_token(
     } else if c == '"' && spec.heredocs && cur.starts_with("\"\"\"") {
         TokenKind::Str(literal::heredoc(cur, line, col)?)
     } else if c == '"' {
-        TokenKind::Str(if spec.raw_strings { literal::raw(cur, line, col)? } else { literal::quoted(cur, '"', line, col)? })
+        TokenKind::Str(if spec.raw_strings { literal::raw(cur, line, col)? } else { literal::quoted(cur, '"', spec.jass_literals, line, col)? })
     } else if c == '\'' && spec.rawcodes {
-        TokenKind::Int(literal::rawcode(cur, line, col)?)
+        TokenKind::Int(literal::rawcode(cur, spec.jass_literals, line, col)?)
     } else if c == '\'' && spec.single_quote_strings {
-        TokenKind::Str(literal::quoted(cur, '\'', line, col)?)
+        TokenKind::Str(literal::quoted(cur, '\'', spec.jass_literals, line, col)?)
     } else if c == '[' && spec.long_brackets && literal::long_bracket_level(cur, 0).is_some() {
         TokenKind::Str(literal::long_bracket(cur, "long string", line, col)?)
     } else {

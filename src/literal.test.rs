@@ -99,7 +99,7 @@ fn scans_strings_with_escapes() {
     assert_eq!(string(&mut cur, 1, 1), Ok("a\n\"b\\".to_string()));
     assert_eq!(cur.peek(), Some(' '));
     let mut cur = Cursor::new(r#"'it\'s \x41\65\u{263A}'"#);
-    assert_eq!(quoted(&mut cur, '\'', 1, 1), Ok("it's AA☺".to_string()));
+    assert_eq!(quoted(&mut cur, '\'', false, 1, 1), Ok("it's AA☺".to_string()));
 }
 
 #[test]
@@ -111,10 +111,10 @@ fn reports_unterminated_string() {
 
 #[test]
 fn packs_rawcodes() {
-    assert_eq!(rawcode(&mut Cursor::new("'hfoo'"), 1, 1), Ok(0x68666f6f));
-    assert_eq!(rawcode(&mut Cursor::new("'d'"), 1, 1), Ok(100));
+    assert_eq!(rawcode(&mut Cursor::new("'hfoo'"), false, 1, 1), Ok(0x68666f6f));
+    assert_eq!(rawcode(&mut Cursor::new("'d'"), false, 1, 1), Ok(100));
     for bad in ["'ab'", "'abc'", "''", "'abcde'"] {
-        let err = rawcode(&mut Cursor::new(bad), 1, 1).unwrap_err();
+        let err = rawcode(&mut Cursor::new(bad), false, 1, 1).unwrap_err();
         assert!(err.message.contains("must be 1 or 4 characters"), "{bad}: {err:?}");
     }
 }
@@ -138,4 +138,27 @@ fn scans_heredocs() {
     let mut cur = Cursor::new("\"\"\"a\n\"b\"\n\"\"\"x");
     assert_eq!(heredoc(&mut cur, 1, 1), Ok("a\n\"b\"\n".to_string()));
     assert_eq!(cur.peek(), Some('x'));
+}
+
+/// JASS's (`jass`): a line break is part of a string or a rawcode; a
+/// string's only escapes are `\\` and `\"`, any other backslash itself.
+#[test]
+fn jass_literals() {
+    let mut cur = Cursor::new("\"a\nb\" x");
+    assert_eq!(quoted(&mut cur, '"', true, 1, 1), Ok("a\nb".to_string()));
+    assert_eq!(cur.line(), 2);
+    assert!(quoted(&mut Cursor::new("\"a\nb\""), '"', false, 1, 1).is_err());
+    // pjass's escapes; any other an error (a backslash before a line break too).
+    let escapes = r#""a\\b\"c\nd\te\bf\rg\f" x"#;
+    assert_eq!(quoted(&mut Cursor::new(escapes), '"', true, 1, 1), Ok("a\\b\"c\nd\te\u{8}f\rg\u{c}".to_string()));
+    assert!(quoted(&mut Cursor::new(r#""UI\FrameDef""#), '"', true, 1, 1).is_err());
+    assert!(quoted(&mut Cursor::new("\"a\\\nb\""), '"', true, 1, 1).is_err());
+    assert_eq!(rawcode(&mut Cursor::new("'ab\nc'"), true, 1, 1), Ok(i64::from_be_bytes([0, 0, 0, 0, b'a', b'b', b'\n', b'c'])));
+    assert!(rawcode(&mut Cursor::new("'ab\nc'"), false, 1, 1).is_err());
+    // No escapes: a backslash is a byte; an emoji four; a lost byte one.
+    assert!(rawcode(&mut Cursor::new(r"'\\'"), true, 1, 1).is_err());
+    assert_eq!(rawcode(&mut Cursor::new(r"'\\ab'"), true, 1, 1), Ok(i64::from_be_bytes([0, 0, 0, 0, b'\\', b'\\', b'a', b'b'])));
+    assert_eq!(rawcode(&mut Cursor::new("'😀'"), true, 1, 1), Ok(i64::from_be_bytes([0, 0, 0, 0, 0xF0, 0x9F, 0x98, 0x80])));
+    assert_eq!(rawcode_bytes("a\u{FFFD}b\u{FFFD}"), b"a?b?");
+    assert_eq!(rawcode(&mut Cursor::new(r"'a\bc'"), true, 1, 1), Ok(i64::from_be_bytes([0, 0, 0, 0, b'a', b'\\', b'b', b'c'])));
 }

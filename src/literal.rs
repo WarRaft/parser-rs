@@ -113,7 +113,7 @@ pub fn number(cur: &mut Cursor, spec: &NumberSpec, line: usize, col: usize) -> R
 
 /// Scans a `"..."` string.
 pub fn string(cur: &mut Cursor, line: usize, col: usize) -> Result<String, ParseError> {
-    quoted(cur, '"', line, col)
+    quoted(cur, '"', false, line, col)
 }
 
 /// Scans a `"..."` string without escapes: everything up to the next `"`
@@ -142,13 +142,34 @@ pub fn raw(cur: &mut Cursor, line: usize, col: usize) -> Result<String, ParseErr
 /// and an escaped line break continues the string on the next line. Any
 /// other escaped character stands for itself. An unescaped line break
 /// ends the string with an error.
-pub fn quoted(cur: &mut Cursor, quote: char, line: usize, col: usize) -> Result<String, ParseError> {
+///
+/// `jass`: a JASS string, as the game (and pjass) reads it: everything up
+/// to the closing quote, line breaks included; its escapes `\b \t \r \n
+/// \f \" \\`, any other an error (a backslash before a line break too).
+pub fn quoted(cur: &mut Cursor, quote: char, jass: bool, line: usize, col: usize) -> Result<String, ParseError> {
     let unterminated = || ParseError::at("unterminated string literal", line, col);
     cur.advance(); // opening quote
     let mut s = String::new();
     loop {
         match cur.peek() {
-            None | Some('\n') => return Err(unterminated()),
+            None => return Err(unterminated()),
+            Some('\n') if !jass => return Err(unterminated()),
+            Some('\\') if jass => {
+                let (at_line, at_col) = (cur.line(), cur.col());
+                cur.advance();
+                let decoded = match cur.peek() {
+                    Some('b') => '\u{8}',
+                    Some('t') => '\t',
+                    Some('r') => '\r',
+                    Some('n') => '\n',
+                    Some('f') => '\u{c}',
+                    Some('"') => '"',
+                    Some('\\') => '\\',
+                    _ => return Err(ParseError::at(r#"invalid escape sequence: a string's are \b \t \r \n \f \" \\"#, at_line, at_col)),
+                };
+                s.push(decoded);
+                cur.advance();
+            }
             Some(c) if c == quote => {
                 cur.advance();
                 return Ok(s);
@@ -219,13 +240,18 @@ fn push_code(s: &mut String, code: Option<u32>) {
 
 /// Scans a `'abcd'` rawcode and packs its four bytes big-endian into an
 /// integer, the way the game does. A one-character `'d'` is that
-/// character's byte (100); any other length is an error.
-pub fn rawcode(cur: &mut Cursor, line: usize, col: usize) -> Result<i64, ParseError> {
+/// character's byte (100); any other length is an error. A line break in
+/// it ends it with an error, unless `jass`: then, as the game reads one,
+/// the quote takes every byte up to the closing one (no escapes, line
+/// breaks and an emoji's four bytes too), one or four bytes
+/// ([`rawcode_bytes`]).
+pub fn rawcode(cur: &mut Cursor, jass: bool, line: usize, col: usize) -> Result<i64, ParseError> {
     cur.advance(); // opening quote
     let mut s = String::new();
     loop {
         match cur.peek() {
-            None | Some('\n') => {
+            None => return Err(ParseError::at("unterminated rawcode literal", line, col)),
+            Some('\n') if !jass => {
                 return Err(ParseError::at("unterminated rawcode literal", line, col));
             }
             Some('\'') => {
@@ -238,14 +264,28 @@ pub fn rawcode(cur: &mut Cursor, line: usize, col: usize) -> Result<i64, ParseEr
             }
         }
     }
-    if s.len() != 4 && s.len() != 1 {
-        return Err(ParseError::at(
-            format!("rawcode literal '{s}' must be 1 or 4 characters"),
-            line,
-            col,
-        ));
+    let bytes = if jass { rawcode_bytes(&s) } else { s.clone().into_bytes() };
+    if bytes.len() != 4 && bytes.len() != 1 {
+        let unit = if jass { "bytes" } else { "characters" };
+        return Err(ParseError::at(format!("rawcode literal '{s}' must be 1 or 4 {unit}, not {}", bytes.len()), line, col));
     }
-    Ok(s.bytes().fold(0i64, |acc, b| (acc << 8) | b as i64))
+    Ok(bytes.iter().fold(0i64, |acc, &b| (acc << 8) | i64::from(b)))
+}
+
+/// A JASS rawcode's bytes, as its text holds them: each character's UTF-8
+/// bytes, but `U+FFFD`, a byte the text lost (a file that isn't UTF-8,
+/// read with its invalid bytes replaced), one byte, unknown here (`?`).
+pub fn rawcode_bytes(text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    for c in text.chars() {
+        if c == '\u{FFFD}' {
+            out.push(b'?');
+        } else {
+            let mut buf = [0; 4];
+            out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+        }
+    }
+    out
 }
 
 /// The level of a Lua long bracket opening `offset` characters ahead

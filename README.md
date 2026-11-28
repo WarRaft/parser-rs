@@ -220,7 +220,12 @@ store a second encoding on AST nodes.
 - Literals use the shared scanners (`literal`): decimal and hex ints,
   reals, `"strings"` with escapes, `'rawcodes'`. A language whose
   strings are paths (FDF) sets `raw_strings`: no escapes, a backslash
-  is itself.
+  is itself. JASS sets `jass_literals`, its strings and rawcodes as the
+  game reads them: a quote takes everything up to the closing one, line
+  breaks included, and a string's escapes pjass's (`\b \t \r \n \f \" \\`, any
+  other an error); a
+  rawcode has none, its bytes counted (`literal::rawcode_bytes`, a lost
+  byte, U+FFFD, one). A byte-order mark is whitespace in every language.
 
 ### 9. Editor integration (VS Code)
 

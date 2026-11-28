@@ -152,7 +152,8 @@ impl Cursor {
             }
             let (line, col) = (self.line, self.col);
             match self.peek() {
-                Some(c) if c.is_whitespace() => {
+                // A byte-order mark anywhere is whitespace (the game's, pjass's).
+                Some(c) if c.is_whitespace() || c == '\u{feff}' => {
                     self.advance();
                     continue;
                 }

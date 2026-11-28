@@ -168,6 +168,29 @@ pub mod rule {
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
     pub const CALL_BEFORE_DECLARATION: &str = "call-before-declaration";
+    pub const LOCAL_AFTER_STATEMENT: &str = "local-after-statement";
+    pub const SHADOWED_NAME: &str = "shadowed-name";
+    pub const HIDDEN_TYPE: &str = "hidden-type";
+    pub const RESERVED_NAME: &str = "reserved-name";
+    pub const UNINITIALIZED_VARIABLE: &str = "uninitialized-variable";
+    pub const RETURN_CONVERSION: &str = "return-conversion";
+    pub const CONSTANT_FUNCTION: &str = "constant-function";
+    pub const RECURSIVE_LOCAL: &str = "recursive-local";
+    pub const NATIVE_AS_CODE: &str = "native-as-code";
+    pub const TOO_MANY_ARGUMENTS: &str = "too-many-arguments";
+    pub const UNSAFE_IN_GLOBALS: &str = "unsafe-in-globals";
+    pub const CODE_ARRAY: &str = "code-array";
+    pub const ARRAY_INITIALIZER: &str = "array-initializer";
+    pub const CONSTANT_WITHOUT_VALUE: &str = "constant-without-value";
+    pub const LONG_STRING: &str = "long-string";
+    pub const UNSAFE_RAWCODE: &str = "unsafe-rawcode";
+    pub const NUMBER_OVERFLOW: &str = "number-overflow";
+    pub const LONG_NAME: &str = "long-name";
+    pub const FILTER_RETURNS_BOOLEAN: &str = "filter-returns-boolean";
+    pub const SHADOWED_GLOBAL: &str = "shadowed-global";
+    pub const MODULO_OPERATOR: &str = "modulo-operator";
+    pub const GLOBAL_MAYBE_UNINITIALIZED: &str = "global-maybe-uninitialized";
+    pub const STRING_HASH_COLLISION: &str = "string-hash-collision";
     pub const OBJECT_VALUE_TYPE: &str = "object-value-type";
     pub const OBJECT_VALUE_RANGE: &str = "object-value-range";
     pub const OBJECT_UNKNOWN_FIELD: &str = "object-unknown-field";
@@ -183,6 +206,7 @@ pub mod rule {
 /// Group ids. Kebab-case, stable, never the same as a rule id.
 pub mod group {
     pub const STRICT: &str = "strict";
+    pub const WARNINGS: &str = "warnings";
 }
 
 /// A group of rules switched together.
@@ -195,7 +219,10 @@ pub struct Group {
 /// Every group. Keep in step with the `wc3-rs` README.
 pub const GROUPS: &[Group] = &[Group {
     id: group::STRICT,
-    summary: "strict JASS, as the game reads it: what extended JASS and this toolchain accept beyond it; always errors in the strict dialect",
+    summary: "strict JASS, as the game reads it: what extended JASS and this toolchain accept beyond it, and what breaks the game's compiling or running the script; always errors in the strict dialect",
+}, Group {
+    id: group::WARNINGS,
+    summary: "JASS the game reads and runs, but that's likely a mistake or a limit of a patch: warnings, each set on its own",
 }];
 
 /// The group with id `id`.
@@ -259,7 +286,7 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS", "Zinc", "AngelScript"],
         enabled: true,
         summary: "a function (or `get` accessor) with a return type that may not return a value",
-        groups: &[],
+        groups: &[group::STRICT],
     },
     Rule {
         id: rule::INFINITE_LOOP,
@@ -415,6 +442,167 @@ pub const RULES: &[Rule] = &[
         enabled: false,
         summary: "a function called (or named by `function X`) above its declaration; the game knows a function only from its declaration down",
         groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::LOCAL_AFTER_STATEMENT,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "a `local` after a function's first other statement; the game reads locals only at its top (a build moves them there)",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::SHADOWED_NAME,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a parameter or a local named as a declared type or a function (`local effect effect`): legal, the context tells them apart, but confusing (a build renames it)",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::HIDDEN_TYPE,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a name the game keeps for a type: a parameter or a local named as a primitive (`local integer integer`), a global named as a type, or a type named after a parameter or a local of its name hid it in a function",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::RESERVED_NAME,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "a name the game keeps for itself: `alias` (a build renames it)",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::UNINITIALIZED_VARIABLE,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a local read before anything sets it, or a global read in `globals` before its value: the game stops the thread (crashes, in `globals`)",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::RETURN_CONVERSION,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a value returned that the game won't convert: an integer from a function returning real, `null` from one returning integer, real, boolean or code",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::CONSTANT_FUNCTION,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a `constant function` that sets a global or calls a function that isn't constant",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::RECURSIVE_LOCAL,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a function calling itself in a local's value",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::NATIVE_AS_CODE,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "`function N` of a native: the game can't run it as code",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::TOO_MANY_ARGUMENTS,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a call with more than 31 arguments, more than the game passes",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::UNSAFE_IN_GLOBALS,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a call in `globals` the game can't make yet: one that crashes it (`GetObjectName`, `CreateQuest`, `CreateMultiboard`, `CreateLeaderboard`, `CreateRegion` on saving) or always gives null (`OrderId`, `OrderId2String`, `UnitId2String`)",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::CODE_ARRAY,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "an array of `code`, which the game doesn't have",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::ARRAY_INITIALIZER,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "an array given a value where it's declared, which the game doesn't read",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::CONSTANT_WITHOUT_VALUE,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a constant declared without its value",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::UNSAFE_RAWCODE,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a rawcode of bytes an editor can't show or keep (a control character, a line break, bytes that aren't UTF-8): the game reads its bytes as they are, an editor saving the file changes them; written as `0x...`, the same number, it's safe",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::LONG_STRING,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a string literal longer, in bytes, than the game keeps when a saved game is loaded (1023; a concatenation of literals, 4092), which crashes loading it; `[jass] string_limit` and `concat_limit` set the limits (0: none), for UjAPI or Reforged",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::NUMBER_OVERFLOW,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a number literal too big for its type: the game cuts it, as its parser does",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::LONG_NAME,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a name longer than 3958 characters, more than the game reads (a generator's slip)",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::FILTER_RETURNS_BOOLEAN,
+        languages: &["JASS"],
+        enabled: true,
+        summary: "a function given to `Filter` or `Condition` that doesn't return boolean",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::SHADOWED_GLOBAL,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "a local or a parameter named as a global variable, which it hides there (legal; a build renames it)",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::MODULO_OPERATOR,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "the `%` operator, which patches before 1.29 don't have",
+        groups: &[group::WARNINGS],
+    },
+    Rule {
+        id: rule::GLOBAL_MAYBE_UNINITIALIZED,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "a global without a value read in a function: it may not be set yet (often set lazily, so off)",
+        groups: &[],
+    },
+    Rule {
+        id: rule::STRING_HASH_COLLISION,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "two different strings with the same `StringHash` (a hash's way: off)",
+        groups: &[],
     },
     Rule {
         id: rule::DECLARATION_AFTER_FUNCTION,

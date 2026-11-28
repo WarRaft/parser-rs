@@ -21,6 +21,12 @@ fn off_by_default() {
             rule::IMPLICIT_KEYWORD,
             rule::MERGED_FUNCTION,
             rule::CALL_BEFORE_DECLARATION,
+            rule::LOCAL_AFTER_STATEMENT,
+            rule::RESERVED_NAME,
+            rule::SHADOWED_GLOBAL,
+            rule::MODULO_OPERATOR,
+            rule::GLOBAL_MAYBE_UNINITIALIZED,
+            rule::STRING_HASH_COLLISION,
             rule::DECLARATION_AFTER_FUNCTION,
             rule::GLOBAL_OUTSIDE_GLOBALS,
         ]
