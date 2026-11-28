@@ -71,6 +71,10 @@ Never hardcode the names such a format happens to use today; the
 program that reads the document decides what a name means. Its names
 (FDF's frames and keys, declared by a statement's shape) are symbols
 in `Scope::Data`: matched by name across the files, apart from code's.
+Code refers to them softly: `strings::literals` gives every quoted
+string of a text (its value, its text's span inside the quotes), and a
+consumer links the ones whose text is such a name, whatever they're
+passed to.
 
 So an optional dialect (vJASS on top of JASS) is **not a second parser**.
 It's a bigger keyword set, maybe extra puncts and comment forms, plus

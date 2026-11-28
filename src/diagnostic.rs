@@ -175,6 +175,8 @@ pub mod rule {
     pub const DUPLICATE_CELL: &str = "duplicate-cell";
     pub const CELL_OUTSIDE_BOUNDS: &str = "cell-outside-bounds";
     pub const DUPLICATE_STRING: &str = "duplicate-string";
+    pub const MISSING_FILE: &str = "missing-file";
+    pub const TOC_LAST_LINE: &str = "toc-last-line";
 }
 
 /// Group ids. Kebab-case, stable, never the same as a rule id.
@@ -474,6 +476,20 @@ pub const RULES: &[Rule] = &[
         languages: &["WTS"],
         enabled: true,
         summary: "a string number defined twice in a string table",
+        groups: &[],
+    },
+    Rule {
+        id: rule::MISSING_FILE,
+        languages: &["FDF", "TOC"],
+        enabled: true,
+        summary: "a frame file a `.toc` lists, or an FDF string names (`IncludeFile \"....fdf\"`), that's neither the project's nor the game's",
+        groups: &[],
+    },
+    Rule {
+        id: rule::TOC_LAST_LINE,
+        languages: &["TOC"],
+        enabled: true,
+        summary: "a `.toc` file's last line without a line break after it: the game doesn't read it",
         groups: &[],
     },
 ];
