@@ -167,6 +167,7 @@ pub mod rule {
     pub const MERGED_FUNCTION: &str = "merged-function";
     pub const DECLARATION_AFTER_FUNCTION: &str = "declaration-after-function";
     pub const GLOBAL_OUTSIDE_GLOBALS: &str = "global-outside-globals";
+    pub const CALL_BEFORE_DECLARATION: &str = "call-before-declaration";
     pub const OBJECT_VALUE_TYPE: &str = "object-value-type";
     pub const OBJECT_VALUE_RANGE: &str = "object-value-range";
     pub const OBJECT_UNKNOWN_FIELD: &str = "object-unknown-field";
@@ -406,6 +407,13 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS"],
         enabled: false,
         summary: "more than one `main` or `config`, which the build merges into one; the game reads one",
+        groups: &[group::STRICT],
+    },
+    Rule {
+        id: rule::CALL_BEFORE_DECLARATION,
+        languages: &["JASS"],
+        enabled: false,
+        summary: "a function called (or named by `function X`) above its declaration; the game knows a function only from its declaration down",
         groups: &[group::STRICT],
     },
     Rule {
