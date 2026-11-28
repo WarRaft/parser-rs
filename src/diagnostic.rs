@@ -181,7 +181,7 @@ pub mod rule {
 
 /// Group ids. Kebab-case, stable, never the same as a rule id.
 pub mod group {
-    pub const PURE: &str = "pure";
+    pub const STRICT: &str = "strict";
 }
 
 /// A group of rules switched together.
@@ -193,8 +193,8 @@ pub struct Group {
 
 /// Every group. Keep in step with the `wc3-rs` README.
 pub const GROUPS: &[Group] = &[Group {
-    id: group::PURE,
-    summary: "pure JASS as the game reads it: what this toolchain accepts beyond it",
+    id: group::STRICT,
+    summary: "strict JASS, as the game reads it: what extended JASS and this toolchain accept beyond it; always errors in the strict dialect",
 }];
 
 /// The group with id `id`.
@@ -350,7 +350,7 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS"],
         enabled: false,
         summary: "a function or native without `takes` or `returns`, which the game requires",
-        groups: &[group::PURE],
+        groups: &[group::STRICT],
     },
     Rule {
         id: rule::UNKNOWN_NAME,
@@ -399,28 +399,28 @@ pub const RULES: &[Rule] = &[
         languages: &["JASS"],
         enabled: false,
         summary: "an assignment without `set`, a call without `call` or a local without `local`, which the game requires",
-        groups: &[group::PURE],
+        groups: &[group::STRICT],
     },
     Rule {
         id: rule::MERGED_FUNCTION,
         languages: &["JASS"],
         enabled: false,
         summary: "more than one `main` or `config`, which the build merges into one; the game reads one",
-        groups: &[group::PURE],
+        groups: &[group::STRICT],
     },
     Rule {
         id: rule::DECLARATION_AFTER_FUNCTION,
         languages: &["JASS"],
         enabled: false,
         summary: "a global, `globals` block, `native` or `type` after a function; the game reads them only before the first one",
-        groups: &[group::PURE],
+        groups: &[group::STRICT],
     },
     Rule {
         id: rule::GLOBAL_OUTSIDE_GLOBALS,
         languages: &["JASS"],
         enabled: false,
         summary: "a variable declared at the top level outside `globals ... endglobals`, where the game doesn't read it",
-        groups: &[group::PURE],
+        groups: &[group::STRICT],
     },
     Rule {
         id: rule::OBJECT_VALUE_TYPE,

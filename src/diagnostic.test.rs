@@ -42,5 +42,5 @@ fn groups_are_known_and_distinct_from_rules() {
             assert!(find_group(g).is_some(), "{} names unknown group {g}", r.id);
         }
     }
-    assert_eq!(find_rule(rule::IMPLICIT_SIGNATURE).unwrap().groups, &[group::PURE]);
+    assert_eq!(find_rule(rule::IMPLICIT_SIGNATURE).unwrap().groups, &[group::STRICT]);
 }

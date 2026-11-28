@@ -58,6 +58,14 @@ declares its dialect in a header comment, read by
   project's default dialect first; see the
   [`wc3-rs` README](../wc3-rs/README.md#projects). The library API itself
   never looks at the file system.
+- **A default may only grow by what can't mean anything else.** A
+  base language can have two modes: strict, exactly what the game
+  reads (for checking compiled code), and extended, the default. No
+  strict program may break, or read another way, in extended: an
+  addition only gives a meaning to what strict rejects (JASS's `!`,
+  `&&`, `||`, `+=`, `-=`), never takes a name from it (a keyword
+  `scope` would break `integer scope = 1`: that's a dialect's, opted
+  into). See the [`jass-rs` README](../jass-rs/README.md#strict-and-extended-jass).
 - **Header only.** Only the header is read: the leading blank and comment
   lines.
 - **Safe for other tools.** The setting is an ordinary comment, so
@@ -193,11 +201,13 @@ store a second encoding on AST nodes.
   table of the `wc3-rs` README.
 - **Groups** (`diagnostic::group`, `GROUPS`) switch several rules at once;
   a rule lists the groups it belongs to (`Rule::groups`). A group id is
-  never also a rule id. `pure` holds the checks for **pure JASS as the
-  game reads it**: what this toolchain accepts beyond the game's grammar
-  (such as left-out `takes` / `returns`) is fine by default and reported
-  once a project turns `pure` on. A relaxation of the game's grammar gets
-  a rule in `pure`, so a project that must stay game-exact can say so.
+  never also a rule id. `strict` holds the checks for **strict JASS, as
+  the game reads it**: what this toolchain accepts beyond the game's
+  grammar (such as left-out `takes` / `returns`) is fine by default in
+  extended JASS, reported once a project turns `strict` on, and always an
+  error in the strict dialect (compiled code: a built `war3map.j`). A
+  relaxation of the game's grammar gets a rule in `strict`, so what a
+  build makes can be checked as the game reads it.
 
 ### 8. Parsing technique
 
